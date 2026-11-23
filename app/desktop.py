@@ -1136,7 +1136,7 @@ class DesktopPet(EnhancedPet):
             self.bubble.raise_();self.bubble.activateWindow()
             if self.bubble.windowHandle():self.bubble.windowHandle().requestActivate()
             QApplication.setActiveWindow(self.bubble)
-            self.bubble.show_page('settings' if panel is self.settings_dialog else 'accounts' if panel is self.accounts_pane else 'chat',panel)
+            self.bubble.show_page('settings' if panel is getattr(self,'settings_dialog',None) else 'accounts' if panel is getattr(self,'accounts_pane',None) else 'chat',panel)
             if panel is self.chat_window and panel.pages.currentWidget() is panel.chat_body:panel.input.setFocus()
             elif panel is self.settings_dialog:panel.tabs.tabBar().setFocus()
             self._focus_editor_override=False
@@ -1253,10 +1253,12 @@ class DesktopPet(EnhancedPet):
 
     def build_menu(self,menu,tray=False):
         menu.clear()
-        for command in ('status','chat','settings','accounts'):self.menu_command(menu,command)
+        commands = ('status','chat','settings') if tray else ('status','chat','settings','accounts')
+        for command in commands:self.menu_command(menu,command)
         menu.addSeparator()
-        self.populate_accounts_menu(menu)
-        menu.addSeparator()
+        if not tray and hasattr(self,'populate_accounts_menu'):
+            self.populate_accounts_menu(menu)
+            menu.addSeparator()
         self.menu_command(menu,'visible')
         if tray:self.menu_command(menu,'recover')
         else:

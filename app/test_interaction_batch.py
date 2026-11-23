@@ -175,7 +175,7 @@ class InteractionTests(unittest.TestCase):
         tray=QMenu();self.pet.build_menu(tray,tray=True)
         names=lambda menu:[a.objectName().removeprefix('command_') for a in menu.actions() if a.objectName()]
         self.assertEqual(names(menu),['status','chat','settings','accounts','visible','walk','quit'])
-        self.assertEqual(names(tray),['status','chat','settings','accounts','visible','recover','quit'])
+        self.assertEqual(names(tray),['status','chat','settings','visible','recover','quit'])
         self.pet.apply_settings(dict(no_move=True,mouse_through=True));self.pet.hide();self.pet.bubble.hide()
         self.pet.build_menu(menu);walk=next(a for a in menu.actions() if a.objectName()=='command_walk')
         self.assertFalse(walk.isEnabled());self.assertIn('已锁定',walk.text())
