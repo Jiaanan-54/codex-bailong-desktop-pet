@@ -58,7 +58,7 @@ class DesktopPet(EnhancedPet):
         self._pointer_pressed=False;self._pointer_epoch=0
         self.drag_samples=deque(maxlen=12);self.press_feedback=0;self.buffer_until=0
         self._drag_pointer=None;self._last_drag_move=0.
-        self.pending_completion=None;self.settings_dialog=None;self.chat_window=None
+        self.pending_completion=None;self.settings_dialog=None;self.chat_window=None;self.accounts_pane=None
         self.reactions=StatusReactions(time.monotonic());self.last_reaction=None
         self.character_dir=STATE_DIR/'characters';self.character_dir.mkdir(exist_ok=True)
         self.created_at=time.monotonic();self.decode_error=None
@@ -94,6 +94,7 @@ class DesktopPet(EnhancedPet):
         self.bubble.reportRequested.connect(self.open_report)
         self.bubble.quotaCompareRequested.connect(self.open_quota_comparison)
         self.bubble.settingsRequested.connect(self.open_settings)
+        self.bubble.accountsRequested.connect(self.open_accounts)
         self.bubble.chatRequested.connect(self.open_chat)
         self.bubble.shortcutRequested.connect(self.open_shortcut)
         self.bubble.codexRequested.connect(self.open_assistant)
@@ -141,6 +142,12 @@ class DesktopPet(EnhancedPet):
             self.api_prices=api_prices();self.api_prices.updated.connect(self.refresh_tokens);self.api_prices.start()
         self._tray_update_hint=''
         self._refresh_tray_icon()
+        self._account_manager=None
+        if monitor:
+            self._account_refresh_timer=QTimer(self)
+            self._account_refresh_timer.setInterval(7200000)
+            self._account_refresh_timer.timeout.connect(lambda:self.account_manager.refresh_all_accounts())
+            self._account_refresh_timer.start()
         self.tray.activated.disconnect()
         self.tray.activated.connect(lambda reason:self.recover() if reason in (QSystemTrayIcon.ActivationReason.Trigger,QSystemTrayIcon.ActivationReason.DoubleClick) else None)
         from popup_motion import ContextMenu
@@ -1129,7 +1136,7 @@ class DesktopPet(EnhancedPet):
             self.bubble.raise_();self.bubble.activateWindow()
             if self.bubble.windowHandle():self.bubble.windowHandle().requestActivate()
             QApplication.setActiveWindow(self.bubble)
-            self.bubble.show_page('settings' if panel is self.settings_dialog else 'chat',panel)
+            self.bubble.show_page('settings' if panel is self.settings_dialog else 'accounts' if panel is self.accounts_pane else 'chat',panel)
             if panel is self.chat_window and panel.pages.currentWidget() is panel.chat_body:panel.input.setFocus()
             elif panel is self.settings_dialog:panel.tabs.tabBar().setFocus()
             self._focus_editor_override=False
@@ -1160,12 +1167,12 @@ class DesktopPet(EnhancedPet):
         toggles={'character':'character_visible','pin':'on_top','lock':'no_move','through':'mouse_through','bubble':'bubble','detach':'panel_detached'}
         if command in toggles:self.set_option(toggles[command],checked);return
         if command=='status' and not self.settings['bubble']:self.set_option('bubble',True)
-        commands={'status':self.open_status,'settings':self.open_settings,'chat':self.open_chat,
+        commands={'status':self.open_status,'settings':self.open_settings,'accounts':self.open_accounts,'chat':self.open_chat,
             'visible':self.toggle_pet,'recover':self.recover,'position':self.reset_position,
             'walk':lambda:self.set_option('wandering',not self.settings['wandering']),'quit':self.close}
         commands[command]()
     def menu_command(self,menu,command):
-        labels={'status':'查看状态','settings':'桌宠设置…','chat':'和白龙聊天…',
+        labels={'status':'查看状态','settings':'桌宠设置…','accounts':'Codex 账户…','chat':'和白龙聊天…',
             'visible':'显示桌面组件' if self._desktop_hidden else '隐藏全部组件','recover':'找回组件并关闭穿透','character':'显示人物',
             'mode_auto':'自动 / 正常卡片','mode_mini':'胶囊模式','mode_minimal':'极简：额度百分比',
             'position':'回到当前屏幕右下角','pin':'始终置顶','lock':'锁定人物位置（含拖动）',
@@ -1178,9 +1185,77 @@ class DesktopPet(EnhancedPet):
         if command=='walk':action.setEnabled(not self.settings['no_move'])
         action.triggered.connect(lambda value=False,c=command:QTimer.singleShot(0,self,lambda:self.execute_command(c,value)))
         return action
+    @property
+    def account_manager(self):
+        if getattr(self,'_account_manager',None) is None:
+            from codex_account_manager import CodexAccountManager
+            self._account_manager=CodexAccountManager()
+        return self._account_manager
+
+    def populate_accounts_menu(self,menu):
+        try:
+            accounts=self.account_manager.list_accounts()
+            active_id=self.account_manager.get_active_account_id()
+            active_acc=self.account_manager.get_account(active_id) if active_id else None
+            active_name=active_acc.get('alias') if active_acc else '未关联'
+            sub=menu.addMenu(f'Codex 账户 ({active_name})')
+            if accounts:
+                for acc in accounts:
+                    is_active=acc.get('is_active',False)
+                    prefix='● ' if is_active else '○ '
+                    alias=acc.get('alias') or acc.get('email') or acc['id']
+                    plan=(acc.get('plan_type') or '').upper()
+                    label=f"{prefix}{alias} ({plan})" if plan else f"{prefix}{alias}"
+                    action=sub.addAction(label)
+                    if is_active:
+                        action.setEnabled(False)
+                    else:
+                        action.triggered.connect(lambda checked=False,aid=acc['id']:self.switch_codex_account(aid))
+                sub.addSeparator()
+            sub.addAction('导入当前登录…',self.import_current_codex_account)
+            sub.addAction('管理账户…',self.open_codex_accounts)
+        except Exception:
+            sub=menu.addMenu('Codex 账户')
+            sub.addAction('管理账户…',self.open_codex_accounts)
+
+    def switch_codex_account(self,account_id):
+        try:
+            self.account_manager.switch_account(account_id)
+            acc=self.account_manager.get_account(account_id)
+            alias=acc.get('alias') if acc else account_id
+            self.say(f'已切换至 Codex 账户：{alias}',4000)
+            self.refresh_quota()
+            self.refresh_tokens()
+        except Exception as error:
+            self.say(f'切换账户失败：{error}',5000)
+
+    def import_current_codex_account(self):
+        try:
+            acc=self.account_manager.import_current_account()
+            self.say(f'已导入当前 Codex 账户：{acc.get("alias")}',4000)
+        except Exception as error:
+            self.say(f'导入失败：{error}',5000)
+
+    def open_accounts(self):
+        if not self.accounts_pane:
+            from codex_accounts_ui import CodexAccountsPane
+            self.accounts_pane=CodexAccountsPane(self.account_manager,parent=self)
+            self.accounts_pane.accountChanged.connect(lambda aid:(self.refresh_quota(),self.refresh_tokens()))
+        else:
+            self.accounts_pane.refresh_list()
+        self.show_panel(self.accounts_pane)
+
+    def open_codex_accounts(self):
+        from codex_accounts_ui import CodexAccountsDialog
+        dlg=CodexAccountsDialog(self.account_manager,parent=self)
+        dlg.accountChanged.connect(lambda aid:(self.refresh_quota(),self.refresh_tokens()))
+        dlg.exec()
+
     def build_menu(self,menu,tray=False):
         menu.clear()
-        for command in ('status','chat','settings'):self.menu_command(menu,command)
+        for command in ('status','chat','settings','accounts'):self.menu_command(menu,command)
+        menu.addSeparator()
+        self.populate_accounts_menu(menu)
         menu.addSeparator()
         self.menu_command(menu,'visible')
         if tray:self.menu_command(menu,'recover')

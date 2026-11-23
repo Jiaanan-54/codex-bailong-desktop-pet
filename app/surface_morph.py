@@ -614,7 +614,7 @@ class SurfaceMorph:
             # Height follows the container clock; text stays at native size.
             # Anchor the chrome at the top and slide only the body, rather than
             # scaling/recentring two entire cards through each other.
-            order=('status','chat','settings','help')
+            order=('status','chat','settings','accounts','help')
             direction=1 if order.index(z.page)>order.index(a.page) else -1
             travel=stage(time,.04,.84)
             for state,opacity in ((a,1.-travel),(z,travel)):

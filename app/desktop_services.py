@@ -224,9 +224,74 @@ def open_codex(session=None):
     # App Execution Alias, then installed package registration (no guessed package id).
     alias=Path(os.environ.get('LOCALAPPDATA',''))/'Microsoft/WindowsApps/Codex.exe'
     if alias.is_file():os.startfile(alias);return
-    script="Get-StartApps | Where-Object { $_.Name -eq 'Codex' } | Select-Object -First 1 -ExpandProperty AppID"
+    script="Get-StartApps | Where-Object { $_.AppID -like '*OpenAI.Codex*' -or $_.Name -eq 'Codex' -or $_.Name -eq 'ChatGPT' } | Select-Object -First 1 -ExpandProperty AppID"
     try:result=subprocess.run(['powershell.exe','-NoProfile','-Command',script],capture_output=True,text=True,timeout=8,creationflags=0x08000000)
-    except subprocess.TimeoutExpired:raise OSError('查找 Codex 安装超时，请从开始菜单打开后重试') from None
-    appid=result.stdout.strip()
-    if not appid:raise OSError('未找到 Codex 安装，请先从开始菜单打开一次')
-    os.startfile('shell:AppsFolder\\'+appid)
+    except subprocess.TimeoutExpired:pass
+    else:
+        appid=result.stdout.strip()
+        if appid:
+            try:
+                os.startfile('shell:AppsFolder\\'+appid)
+                return
+            except OSError:
+                pass
+    try:
+        os.startfile('codex://')
+        return
+    except OSError:
+        pass
+    raise OSError('未找到 Codex 安装，请先从开始菜单打开一次')
+
+def restart_codex_desktop():
+    """Gracefully terminate running Codex desktop process and relaunch it.
+    Supports Windows (packaged app / desktop exe) and macOS."""
+    import psutil, time, os, sys, subprocess
+
+    if sys.platform == 'darwin':
+        try:
+            subprocess.run(['osascript', '-e', 'quit app "Codex"'], timeout=3)
+        except Exception:
+            subprocess.run(['pkill', '-f', 'Codex'], timeout=3)
+        time.sleep(1.0)
+        try:
+            subprocess.run(['open', '-a', 'Codex'], timeout=5)
+        except Exception:
+            subprocess.run(['open', 'codex://'], timeout=5)
+        return True
+
+    # Windows: scan and terminate existing Codex / ChatGPT GUI processes
+    targets = []
+    for p in psutil.process_iter(['name', 'exe', 'pid']):
+        try:
+            name = (p.info['name'] or '').lower()
+            exe = (p.info['exe'] or '').lower()
+            if 'openai.codex_' in exe or name in ('codex.exe', 'chatgpt.exe', 'codex-code-mode-host.exe', 'codex-computer-use-swift.exe'):
+                targets.append(p)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            pass
+
+    for p in targets:
+        try:
+            p.terminate()
+        except Exception:
+            pass
+
+    if targets:
+        time.sleep(1.2)
+        for p in targets:
+            try:
+                if p.is_running():
+                    p.kill()
+            except Exception:
+                pass
+        time.sleep(0.5)
+
+    try:
+        open_codex()
+    except Exception:
+        try:
+            os.startfile('codex://')
+        except Exception:
+            pass
+    return True
+

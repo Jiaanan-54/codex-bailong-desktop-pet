@@ -222,7 +222,7 @@ class PanelTransition(QObject):
                     ratio=image.devicePixelRatioF()
                     source=QRect(pixel_size(body.x(),ratio),pixel_size(body.y(),ratio),pixel_size(body.width(),ratio),pixel_size(body.height(),ratio))
                     self.cover.image=self.before.copy(source);self.cover.next_image=image.copy(source);self.cover.blend=0.
-                    order=('status','chat','settings','help')
+                    order=('status','chat','settings','accounts','help')
                     if b.panel_page==self.start_page_state[0]=='status':
                         sections=('quota','tokens','reset','legend','more')
                         self.page_direction=1 if sections.index(b.detail_tab)>sections.index(self.start_page_state[-1]) else -1

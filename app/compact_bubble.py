@@ -444,6 +444,7 @@ class CompactBubble(Bubble):
     tokenRefreshRequested=Signal()
     tokenRangeChanged=Signal(str)
     settingsRequested=Signal()
+    accountsRequested=Signal()
     chatRequested=Signal()
     shortcutRequested=Signal()
     codexRequested=Signal()
@@ -606,7 +607,7 @@ class CompactBubble(Bubble):
         entering=self.panel_page=='status'
         if entering:self._editor_origin=dict(expanded=self.expanded,bubble_mode=self.bubble_mode,
                                              auto_compact=self.auto_compact,minimal_normal_open=self._minimal_normal_open)
-        if entering and key in ('chat','settings','help') and not self.expanded:
+        if entering and key in ('chat','settings','accounts','help') and not self.expanded:
             # Measure the real default status layout behind the transition,
             # including current task rows and screen constraints.
             self.expanded=True;self.redraw()
@@ -642,14 +643,19 @@ class CompactBubble(Bubble):
         from settings_controls import SlidingSegments
         toolbar=QWidget();toolbar.setObjectName('detail_shortcuts');toolbar.setFixedHeight(47)
         actions=QHBoxLayout(toolbar);actions.setContentsMargins(0,3,0,10);actions.setSpacing(5)
-        tabs=SlidingSegments([('状态','status'),('聊天','chat'),('设置','settings')],compact=True)
+        tabs=SlidingSegments([('状态','status'),('聊天','chat'),('设置','settings'),('账户','accounts')],compact=True)
         tabs.setFixedHeight(28);tabs.setProperty('largeCardPalette',True);tabs.layout().setSpacing(2)
         tabs.setObjectName('main_navigation');tabs.setCurrentIndex(tabs.findData(self.panel_page),False)
         for key,b in tabs.buttons.items():
             b.setObjectName('bubble_'+('details' if key=='status' else key))
             set_theme_style(b,theme_style_source(b).replace('QToolButton:checked{color:#393343;}',f'QToolButton:checked{{color:{PRIMARY};}}'))
-        tabs.currentIndexChanged.connect(lambda index:self.return_to_status() if tabs.currentData()=='status' else
-            self.chatRequested.emit() if tabs.currentData()=='chat' else self.settingsRequested.emit())
+        def _on_tab_changed(index):
+            page=tabs.currentData()
+            if page=='status':self.return_to_status()
+            elif page=='chat':self.chatRequested.emit()
+            elif page=='settings':self.settingsRequested.emit()
+            elif page=='accounts':self.accountsRequested.emit()
+        tabs.currentIndexChanged.connect(_on_tab_changed)
         actions.addWidget(tabs,1);self._navigation_segments=tabs
         for kind,text,tip,key,value in [('pin','置顶','切换始终置顶','on_top',self.pinned),('move','移动','切换桌面自由移动','wandering',self.wandering)]:
             shortcut=action_button(kind,tip,keyboard=self.panel_page!='status',hit_size=25);shortcut.setCheckable(True);shortcut.setChecked(value)
@@ -673,13 +679,13 @@ class CompactBubble(Bubble):
             self.editor_codex_button=codex
             close=action_button('collapse','收起到正常卡片',keyboard=True,hit_size=26);close.clicked.connect(self.collapse_to_normal);row.addWidget(close)
             self.add(header);self.add(self.navigation());self.add(self.editor_stack)
-        self.editor_title.setText('白龙 '+({'chat':'聊天','settings':'设置','help':'使用说明'}.get(self.panel_page,'详情')))
+        self.editor_title.setText('白龙 '+({'chat':'聊天','settings':'设置','accounts':'账户','help':'使用说明'}.get(self.panel_page,'详情')))
         self.editor_codex_button.setVisible(self.panel_page=='chat')
         tabs=getattr(self,'_navigation_segments',None)
         if tabs:
             blocked=tabs.blockSignals(True);tabs.setCurrentIndex(tabs.findData(self.panel_page));tabs.blockSignals(blocked)
         for button in self.findChildren(QToolButton):
-            if button.objectName() in ('bubble_chat','bubble_settings'):
+            if button.objectName() in ('bubble_chat','bubble_settings','bubble_accounts'):
                 button.setChecked(button.objectName()=='bubble_'+self.panel_page)
             elif button.objectName() in ('bubble_pin','bubble_move'):
                 button.blockSignals(True);button.setChecked(self.pinned if button.objectName()=='bubble_pin' else self.wandering);button.blockSignals(False)
@@ -1302,7 +1308,7 @@ class CompactBubble(Bubble):
         if self.report:self.report.follow.finish_status()
     def editor_height(self):
         if self.panel_page=='help':return min(getattr(self,'_help_height',self.expanded_height()),self.expanded_height_limit())
-        if self.panel_page in ('chat','settings'):
+        if self.panel_page in ('chat','settings','accounts'):
             limit=self.expanded_height() if self.expanded_height()<440 else self.expanded_height_limit()
             baseline=getattr(self,'_status_default_height',None)
             if baseline is None:return self.expanded_height()

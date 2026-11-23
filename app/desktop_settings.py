@@ -286,6 +286,8 @@ class SettingsDialog(QDialog):
         self.number(connection,'quota_increase_threshold','上涨达到',1,100,1,suffix='%')
         self.section(connection,'成本',None)
         pricing=QPushButton('计价设置 ›');pricing.clicked.connect(self.open_pricing);connection.addRow(pricing)
+        self.section(connection,'Codex 账户','凭证隔离、自动保活与一键切换。')
+        accounts_btn=QPushButton('账户管理与切换 ›');accounts_btn.clicked.connect(self.open_accounts);connection.addRow(accounts_btn)
         self.section(connection,'连接诊断',None)
         self.connection_button=QPushButton('检测连接与额度');self.connection_button.setProperty('role','primary');self.connection_button.clicked.connect(self.check_connection);connection.addRow(self.connection_button)
         self.health_panel=CapabilityPanel();self.health_panel.set_snapshot(pet.connection_health.snapshot());connection.addRow(self.health_panel)
@@ -333,6 +335,13 @@ class SettingsDialog(QDialog):
         data=getattr(self.pet.bubble,'token_snapshot',{}).get('projects',{})
         models={m['model'] for p in data.get('ranges',{}).get('all',[]) for m in p['model_usage']}
         open_editor(self.tabs,models,self.pet.refresh_tokens)
+
+    def open_accounts(self):
+        from codex_accounts_ui import CodexAccountsDialog
+        mgr=getattr(self.pet,'account_manager',None)
+        dlg=CodexAccountsDialog(mgr,parent=self)
+        dlg.accountChanged.connect(lambda aid:(getattr(self.pet,'refresh_quota',lambda:None)(),getattr(self.pet,'refresh_tokens',lambda:None)()))
+        dlg.exec()
 
     def build_page_3(self):
         pet=self.pet

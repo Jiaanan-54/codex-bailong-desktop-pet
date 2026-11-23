@@ -2,23 +2,21 @@
 
 在桌面查看 Codex 任务状态、完成提醒、账户额度和 Token 用量，也可以让白龙陪你一起工作。支持仅卡片使用，人物动画按需下载。
 
-**[Windows 首次安装](https://github.com/Wunsch2048/codex-bailong-desktop-pet/releases/download/v1.9.0/bailong-desktop-pet-1.9.0-setup.exe)** | **[程序更新](https://github.com/Wunsch2048/codex-bailong-desktop-pet/releases/latest)** | [Linux 预览版](#linux--niri--kde) | [macOS 社区版](#macos)
+**[Windows 首次安装](https://github.com/Mahongyuu/codex-bailong-desktop-pet/releases/download/v1.10.0/bailong-desktop-pet-codex-multi-account.zip)** | **[程序更新](https://github.com/Mahongyuu/codex-bailong-desktop-pet/releases/latest)** | [Linux 预览版](#linux--niri--kde) | [macOS 社区版](#macos)
 
-Windows 当前公开版 **v1.9.0**。在线安装器直接获取最新累计程序；已有用户可在“设置 → 维护 → 软件更新”升级，无需逐个安装旧补丁。升级保留设置、统计和已下载素材。
+Windows 当前公开版 **v1.10.0**。新增 Codex 多账户一键切换、独立物理凭据隔离、直接拉起登录授权及额度测算保活。已有用户可在“设置 → 维护 → 软件更新”升级。升级保留设置、统计和已下载素材。
 
 ![白龙桌宠封面](docs/media/cover.png)
 
 ## 最近更新
 
-### v1.9.0
+### v1.10.0
 
-- **图表成本**　模型页和卡片的柱状图悬停增加总成本，每个模型显示对应价格和 Token。总 Token 保持原来的样式。
-- **模型计价**　补齐 GPT-6.2 单价，新模型出现时主动检查价表，更新失败会重试。已有统计按补齐的价格重新计算。
-- **数字动画**　实时和今日数字经过中间数逐位滚动，支持上翻和下翻，移动时轻微虚化，停稳后恢复清晰。
-- **悬停与菜单**　浮窗贴近触发位置展开，跟随实际锚点，精简说明文字。改善刷新时浮窗突然消失和托盘浮窗抖动，修复右键桌宠导致崩溃的问题。
-- **卡片过渡**　台词出现和会话数量变化时平滑调整高度，减少文字模糊。修复额度周期切换跳闪和实时浮窗排版。
+- **Codex 多账户管理**　气泡卡片新增「账户」专栏，支持托管多个 Codex / ChatGPT 账户凭证，凭证由系统本地安全加密物理隔离，支持一键秒级切换。
+- **登录与同步重启**　「新增账户」直接拉起系统默认浏览器进入官方 OAuth 授权页，授权完成后自动捕获凭据；切换账户时同步平滑重启 Codex，让新账户凭据立即可用。
+- **独立额度与有效期**　每个账户均支持独立沙箱测算 5 小时与周额度并展示重置倒计时；卡片精确展示凭证剩余天数与到期时间戳，支持一键全部刷新与单户定向刷新。
 
-[查看 v1.9.0 完整更新与下载](https://github.com/Wunsch2048/codex-bailong-desktop-pet/releases/tag/v1.9.0)
+[查看 v1.10.0 完整更新与下载](https://github.com/Mahongyuu/codex-bailong-desktop-pet/releases/tag/v1.10.0)
 
 ## 主要功能
 
