@@ -37,6 +37,11 @@ class Blob(ctypes.Structure):
     _fields_=[('size',ctypes.c_ulong),('data',ctypes.POINTER(ctypes.c_ubyte))]
 
 def protect(value,decrypt=False):
+    if sys.platform != 'win32':
+        from codex_account_vault import vault_encrypt, vault_decrypt
+        if decrypt:
+            return vault_decrypt(value)
+        return vault_encrypt(value)
     raw=base64.b64decode(value) if decrypt else value.encode('utf-8')
     buf=ctypes.create_string_buffer(raw);source=Blob(len(raw),ctypes.cast(buf,ctypes.POINTER(ctypes.c_ubyte)));out=Blob()
     function=ctypes.windll.crypt32.CryptUnprotectData if decrypt else ctypes.windll.crypt32.CryptProtectData

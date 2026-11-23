@@ -18,5 +18,8 @@ def check_startup():
         '请重新运行官方安装器，选择当前安装位置以修复安装。\n\n'
         '缺少文件：' + '、'.join(missing) + '\n程序目录：' + str(directory)
     )
-    ctypes.windll.user32.MessageBoxW(None, message, '白龙桌宠 · 需要修复安装', 0x10)
+    if sys.platform == 'win32':
+        ctypes.windll.user32.MessageBoxW(None, message, '白龙桌宠 · 需要修复安装', 0x10)
+    else:
+        sys.stderr.write(message + '\n')
     return False
