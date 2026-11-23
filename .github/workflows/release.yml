@@ -41,6 +41,7 @@ jobs:
 
           # Prepare output release package structure
           $dist = "dist/BailongEnhanced"
+          New-Item -ItemType Directory -Path "$dist/app" -Force
           Copy-Item -Path "app/material_catalog.json" -Destination "$dist/app/material_catalog.json" -Force
           Copy-Item -Path "app/book_catalog.json" -Destination "$dist/app/book_catalog.json" -Force
           Copy-Item -Path "app/branding" -Destination "$dist/app/branding" -Recurse -Force
