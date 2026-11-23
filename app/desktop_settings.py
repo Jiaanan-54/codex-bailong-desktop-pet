@@ -430,7 +430,9 @@ class SettingsDialog(QDialog):
         return control
     def choose_path(self,key):
         if key=='home':value=QFileDialog.getExistingDirectory(self,'选择 Codex 数据目录',self.path_fields[key].text())
-        else:value,_=QFileDialog.getOpenFileName(self,'选择 Codex CLI（不是桌面主程序）',self.path_fields[key].text(),'程序 (*.exe);;所有文件 (*)')
+        else:
+            filter_spec='程序 (*.exe);;所有文件 (*)' if sys.platform=='win32' else '所有文件 (*)'
+            value,_=QFileDialog.getOpenFileName(self,'选择 Codex CLI（不是桌面主程序）',self.path_fields[key].text(),filter_spec)
         if value:self.path_fields[key].setText(value)
     def path_source_changed(self,*args):
         wsl=self.path_source.currentData()=='wsl'

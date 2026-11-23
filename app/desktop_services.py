@@ -179,9 +179,13 @@ def codex_desktop_open():
     denied=False
     for process in psutil.process_iter(['name']):
         try:
-            if (process.info['name'] or '').lower() not in ('codex.exe','chatgpt.exe'):continue
-            path=process.exe().lower()
-            if 'openai.codex_' in path:return True
+            name=(process.info['name'] or '').lower()
+            if sys.platform=='darwin':
+                if name in ('codex','chatgpt'):return True
+            else:
+                if name not in ('codex.exe','chatgpt.exe'):continue
+                path=process.exe().lower()
+                if 'openai.codex_' in path:return True
         except psutil.AccessDenied:denied=True
         except (psutil.NoSuchProcess,OSError):pass
     return None if denied else False

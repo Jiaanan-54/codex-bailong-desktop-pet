@@ -146,6 +146,22 @@ def find_executable():
     if candidates:
         try:return str(max(candidates,key=lambda p:p.stat().st_mtime))
         except OSError:pass
+    if sys.platform=='darwin':
+        mac_candidates=[
+            Path('/opt/homebrew/bin/codex'),
+            Path('/usr/local/bin/codex'),
+            Path.home()/'.local/bin/codex',
+            Path.home()/'.cargo/bin/codex',
+            Path('/Applications/Codex.app/Contents/Resources/codex'),
+            Path('/Applications/ChatGPT.app/Contents/Resources/codex'),
+        ]
+        try:mac_candidates.extend(Path.home().glob('.nvm/versions/node/*/bin/codex'))
+        except OSError:pass
+        for candidate in mac_candidates:
+            if candidate.is_file():return str(candidate)
+        aug_path=(os.environ.get('PATH') or '')+':/opt/homebrew/bin:/usr/local/bin:'+str(Path.home()/'.local/bin')
+        candidate=shutil.which('codex',path=aug_path)
+        if candidate:return candidate
     for name in ('codex.exe','codex'):
         candidate=shutil.which(name)
         if candidate and (sys.platform!='win32' or Path(candidate).suffix.lower()=='.exe'):return candidate
