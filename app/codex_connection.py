@@ -146,17 +146,32 @@ def find_executable():
     if candidates:
         try:return str(max(candidates,key=lambda p:p.stat().st_mtime))
         except OSError:pass
+    for root in packaged_roots():
+        # The app/Codex.exe GUI is intentionally excluded; use its real CLI.
+        candidate=root/'resources/codex.exe'
+        if candidate.is_file():return str(candidate)
     if sys.platform=='darwin':
         mac_candidates=[
             Path('/opt/homebrew/bin/codex'),
             Path('/usr/local/bin/codex'),
             Path.home()/'.local/bin/codex',
             Path.home()/'.cargo/bin/codex',
-            Path('/Applications/Codex.app/Contents/Resources/codex'),
+            # ChatGPT.app bundles codex CLI inside codex-cli/bin/ since mid-2025.
+            Path('/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex'),
+            Path('/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'),
             Path('/Applications/ChatGPT.app/Contents/Resources/codex'),
+            Path('/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex'),
+            Path('/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'),
+            Path('/Applications/Codex.app/Contents/Resources/codex'),
         ]
         try:mac_candidates.extend(Path.home().glob('.nvm/versions/node/*/bin/codex'))
         except OSError:pass
+        # Also search inside any installed ChatGPT/Codex .app bundle for nested CLI.
+        for app_dir in (Path('/Applications/ChatGPT.app/Contents/Resources'),
+                        Path('/Applications/Codex.app/Contents/Resources')):
+            if app_dir.is_dir():
+                try:mac_candidates.extend(app_dir.glob('**/bin/codex'))
+                except OSError:pass
         for candidate in mac_candidates:
             if candidate.is_file():return str(candidate)
         aug_path=(os.environ.get('PATH') or '')+':/opt/homebrew/bin:/usr/local/bin:'+str(Path.home()/'.local/bin')
@@ -165,10 +180,6 @@ def find_executable():
     for name in ('codex.exe','codex'):
         candidate=shutil.which(name)
         if candidate and (sys.platform!='win32' or Path(candidate).suffix.lower()=='.exe'):return candidate
-    for root in packaged_roots():
-        # The app/Codex.exe GUI is intentionally excluded; use its real CLI.
-        candidate=root/'resources/codex.exe'
-        if candidate.is_file():return str(candidate)
     npm=Path(os.environ.get('APPDATA') or Path.home()/'AppData/Roaming')/'npm/node_modules/@openai'
     for pattern in ('codex/vendor/*/codex/codex.exe','codex-win32-*/vendor/*/codex/codex.exe'):
         for path in npm.glob(pattern):
@@ -190,7 +201,7 @@ def check_connection(query_quota=True,cancel=None):
             report['summary']=connection_summary(report);return report
     read=read_tracking_probe(home)
     report=dict(version=VERSION,checked=time.time(),desktop_open=codex_desktop_open(),codex_home=str(home),home_exists=home.is_dir(),sessions_exists=(home/'sessions').is_dir(),read_tracking_available=read['state']=='available',cli_found=False,quota_read=False,capabilities={'read':read})
-    report.update(source='wsl' if wsl else 'windows',wsl_distro=saved_paths().get('wsl_distro','') if wsl else '',wsl_running=wsl)
+    report.update(source='wsl' if wsl else 'macos' if sys.platform=='darwin' else 'windows',wsl_distro=saved_paths().get('wsl_distro','') if wsl else '',wsl_running=wsl)
     if report['desktop_open'] is False and read['state']=='available':read.update(state='degraded',code='codex_closed')
     try:report['cli']=find_executable();report['cli_found']=True
     except RuntimeError as error:report['cli_error']=str(error)

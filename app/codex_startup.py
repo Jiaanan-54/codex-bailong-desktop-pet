@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import time
-import psutil
-
-POLL_SECONDS=2
+try:
+    import psutil
+except ImportError:
+    psutil = None
 WATCH_FLAG='--watch-codex'
 
 def data_dir():return __import__('platform_paths').data_dir()
@@ -83,6 +83,13 @@ def configure(value,executable=None):
 
 def desktop_executable(path):
     """Exclude Codex CLI, ChatGPT-only packages and Electron helper processes."""
+    if sys.platform == 'darwin':
+        # On macOS the desktop app is a .app bundle; path is the actual binary inside.
+        value = str(path).lower()
+        # Accept ChatGPT.app or Codex.app Electron GUI binaries.
+        if '/chatgpt.app/' in value or '/codex.app/' in value:
+            return True
+        return False
     value=str(path).lower().replace('/','\\')
     name=value.rsplit('\\',1)[-1]
     if name not in ('chatgpt.exe','codex.exe'):return False
@@ -93,12 +100,49 @@ def desktop_executable(path):
 
 def desktop_sessions():
     sessions=set();uncertain=False
+    if sys.platform == 'darwin':
+        try:
+            pids = set()
+            for proc_name in ('ChatGPT', 'Codex'):
+                res = subprocess.run(['pgrep', '-ix', proc_name], capture_output=True, text=True, timeout=2)
+                if res.returncode == 0:
+                    for line in res.stdout.strip().split():
+                        if line.isdigit():
+                            pids.add(int(line))
+            if pids:
+                for pid in pids:
+                    cmd = subprocess.run(['ps', '-p', str(pid), '-o', 'args='], capture_output=True, text=True, timeout=1)
+                    if '--type=' in cmd.stdout:
+                        continue
+                    ctime = 0.0
+                    if psutil:
+                        try:
+                            ctime = psutil.Process(pid).create_time()
+                        except Exception:
+                            pass
+                    sessions.add((pid, ctime))
+                return sessions
+        except Exception:
+            pass
+    if psutil is None:
+        return sessions if sys.platform == 'darwin' else None
     for process in psutil.process_iter(['name']):
         try:
-            if (process.info['name'] or '').lower() not in ('codex.exe','chatgpt.exe'):continue
-            if not desktop_executable(process.exe()):continue
-            if any(arg.startswith('--type=') for arg in process.cmdline()[1:]):continue
-            sessions.add((process.pid,process.create_time()))
+            name = (process.info['name'] or '').lower()
+            if sys.platform == 'darwin':
+                # On macOS the main GUI process is named 'ChatGPT' or 'Codex'.
+                if name not in ('chatgpt', 'codex'):
+                    continue
+                # Skip Electron helper/renderer sub-processes.
+                cmdline = process.cmdline()
+                if any(arg.startswith('--type=') for arg in cmdline[1:]):
+                    continue
+                sessions.add((process.pid, process.create_time()))
+            else:
+                if name not in ('codex.exe','chatgpt.exe'):continue
+                if not desktop_executable(process.exe()):continue
+                if any(arg.startswith('--type=') for arg in process.cmdline()[1:]):continue
+                sessions.add((process.pid,process.create_time()))
         except psutil.AccessDenied:uncertain=True
         except (psutil.NoSuchProcess,OSError):pass
     return sessions if sessions or not uncertain else None

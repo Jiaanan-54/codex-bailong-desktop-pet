@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag name (e.g. v1.10.0)'
+        description: 'Release tag name (e.g. v1.10.1)'
         required: false
-        default: 'v1.10.0'
+        default: 'v1.10.1'
 
 permissions:
   contents: write
@@ -57,7 +57,7 @@ jobs:
             $version = "${{ github.event.inputs.tag_name }}"
           }
           if ([string]::IsNullOrWhiteSpace($version)) {
-            $version = "v1.10.0"
+            $version = "v1.10.1"
           }
           $zipName = "bailong-desktop-pet-$version-windows-x64.zip"
           Compress-Archive -Path "$dist/*" -DestinationPath $zipName -Force
@@ -114,7 +114,7 @@ jobs:
 
           VERSION="${{ github.ref_name }}"
           if [ -z "$VERSION" ] || [[ "$VERSION" != v* ]]; then
-            VERSION="${{ github.event.inputs.tag_name || 'v1.10.0' }}"
+            VERSION="${{ github.event.inputs.tag_name || 'v1.10.1' }}"
           fi
 
           ZIP_NAME="bailong-desktop-pet-$VERSION-macos.zip"
@@ -143,13 +143,21 @@ jobs:
           path: all-release-assets
           merge-multiple: true
 
-      - name: Determine Tag
+      - name: Determine Tag and Release Notes
         id: get_tag
         run: |
           if [ -n "${{ github.ref_name }}" ] && [[ "${{ github.ref_name }}" == v* ]]; then
-            echo "TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.ref_name }}"
           else
-            echo "TAG=${{ github.event.inputs.tag_name || 'v1.10.0' }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.event.inputs.tag_name || 'v1.10.1' }}"
+          fi
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          if [ -f "docs/releases/${TAG}.md" ]; then
+            echo "BODY_PATH=docs/releases/${TAG}.md" >> $GITHUB_OUTPUT
+          elif [ -f "docs/releases/v1.10.1.md" ]; then
+            echo "BODY_PATH=docs/releases/v1.10.1.md" >> $GITHUB_OUTPUT
+          else
+            echo "BODY_PATH=docs/releases/v1.10.0.md" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate Global SHA256SUMS
@@ -162,8 +170,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_tag.outputs.TAG }}
-          name: 白龙桌宠 ${{ steps.get_tag.outputs.TAG }} - 添加 Codex 账户切换功能
-          body_path: docs/releases/v1.10.0.md
+          name: 白龙桌宠 ${{ steps.get_tag.outputs.TAG }}
+          body_path: ${{ steps.get_tag.outputs.BODY_PATH }}
           files: |
             all-release-assets/*.zip
             all-release-assets/SHA256SUMS.txt

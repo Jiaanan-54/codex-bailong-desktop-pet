@@ -1,8 +1,34 @@
-"""One layering and foreground policy for the pet's native surfaces."""
-import os
+import os, sys, subprocess
 
 from PySide6.QtCore import QEvent, QObject, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QWidget
+
+
+class MacWindowAPI:
+    """macOS foreground process query using native lsappinfo."""
+    def foreground(self):
+        try:
+            front = subprocess.run(['lsappinfo', 'front'], capture_output=True, text=True, timeout=1).stdout.strip()
+            if front:
+                info = subprocess.run(['lsappinfo', 'info', '-only', 'pid', front], capture_output=True, text=True, timeout=1).stdout
+                for token in info.split():
+                    if token.startswith('"pid"='):
+                        return int(token.split('=', 1)[1])
+        except Exception:
+            pass
+        return 0
+
+    def window_pid(self, hwnd):
+        return hwnd
+
+    def topmost(self, hwnd):
+        return False
+
+    def set_layer(self, hwnd, layer, from_bottom=False):
+        return False
+
+    def stack_with(self, top_hwnd, bottom_hwnd):
+        pass
 
 
 class SurfacePolicy(QObject):
@@ -10,9 +36,12 @@ class SurfacePolicy(QObject):
         super().__init__(pet)
         self.pet=pet;self.applied={};self.queued=False;self.foreground_key=None;self.foreground_codex=False
         self.force_bottom=False
-        if api is None and QApplication.platformName()=='windows':
-            from video_fullscreen import WindowAPI
-            api=WindowAPI()
+        if api is None:
+            if QApplication.platformName()=='windows':
+                from video_fullscreen import WindowAPI
+                api=WindowAPI()
+            elif sys.platform=='darwin':
+                api=MacWindowAPI()
         self.api=api
         self.timer=QTimer(self);self.timer.setInterval(300);self.timer.timeout.connect(self.poll_focus)
         if self.api is not None:QApplication.instance().installEventFilter(self)

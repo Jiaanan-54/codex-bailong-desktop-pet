@@ -175,7 +175,18 @@ def codex_desktop_open():
     """Inspect package GUI processes on the monitor thread, never the UI loop."""
     from codex_connection import is_wsl_source
     if is_wsl_source():return None
-    import psutil
+    if sys.platform == 'darwin':
+        try:
+            for candidate in ('ChatGPT', 'Codex'):
+                res = subprocess.run(['pgrep', '-ix', candidate], capture_output=True, timeout=2)
+                if res.returncode == 0 and res.stdout.strip():
+                    return True
+        except Exception:
+            pass
+    try:
+        import psutil
+    except ImportError:
+        return False if sys.platform == 'darwin' else None
     denied=False
     for process in psutil.process_iter(['name']):
         try:
@@ -192,11 +203,23 @@ def codex_desktop_open():
 
 def codex_desktop_process(pid):
     """Match the packaged Codex GUI, including its ChatGPT-branded executable."""
-    import psutil
+    if sys.platform == 'darwin':
+        try:
+            res = subprocess.run(['ps', '-p', str(pid), '-o', 'comm='], capture_output=True, text=True, timeout=1)
+            if res.returncode == 0:
+                name = res.stdout.strip().lower()
+                if any(x in name for x in ('chatgpt', 'codex')):
+                    return True
+        except Exception:
+            pass
     try:
+        import psutil
         process=psutil.Process(pid)
+        if sys.platform=='darwin':
+            name=process.name().casefold()
+            return name in ('chatgpt','codex')
         return process.name().casefold() in ('codex.exe','chatgpt.exe') and 'openai.codex_' in process.exe().casefold()
-    except (psutil.Error,OSError):return False
+    except (Exception, OSError):return False
 
 def codex_conversation_url(session):
     import re

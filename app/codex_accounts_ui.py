@@ -15,11 +15,11 @@ import tempfile
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QTimer, QPoint
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel,
-    QPushButton, QScrollArea, QMessageBox, QInputDialog, QProgressBar
+    QPushButton, QScrollArea, QMessageBox, QInputDialog, QProgressBar, QSizePolicy, QMenu, QFrame
 )
 
 from codex_account_manager import CodexAccountManager
@@ -65,10 +65,11 @@ class AccountCard(QWidget):
         is_active = self.account_data.get('is_active', False)
         bg = SURFACE if is_active else PANEL
         border_color = PRIMARY if is_active else BORDER
+        self.action_buttons = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(5)
+        layout.setSpacing(6)
 
         self.setObjectName('account_card')
         set_theme_style(
@@ -76,158 +77,325 @@ class AccountCard(QWidget):
             f'QWidget#account_card{{background:{bg};border:1px solid {border_color};border-radius:8px;}}'
         )
 
-        # Top row: Status dot + Alias + Plan Badge + Actions
-        top_row = QHBoxLayout()
-        top_row.setContentsMargins(0, 0, 0, 0)
-        top_row.setSpacing(6)
+        # Row 1: 名称 / 账户
+        row1 = QHBoxLayout()
+        row1.setContentsMargins(0, 0, 0, 0)
+        row1.setSpacing(6)
 
+        # 名称: Status dot + Alias
         dot = QLabel('●' if is_active else '○')
         set_theme_style(
             dot,
-            f'{FONT_CSS}font-size:12px;color:{PRIMARY if is_active else MUTED};'
+            f'{FONT_CSS}font-size:11px;color:{PRIMARY if is_active else MUTED};'
         )
-        top_row.addWidget(dot)
+        row1.addWidget(dot)
 
         alias_text = self.account_data.get('alias') or '未命名账户'
         alias_lbl = QLabel(alias_text)
+        alias_lbl.setToolTip(alias_text)
+        alias_lbl.setMinimumWidth(0)
         set_theme_style(
             alias_lbl,
             f'{FONT_CSS}font-size:12px;font-weight:600;color:{INK};'
         )
-        top_row.addWidget(alias_lbl)
+        row1.addWidget(alias_lbl)
 
+        row1.addStretch()
+
+        # 账户: Email
+        email = self.account_data.get('email') or '无关联邮箱'
+        email_lbl = QLabel(email)
+        email_lbl.setToolTip(email)
+        email_lbl.setMinimumWidth(0)
+        set_theme_style(
+            email_lbl,
+            f'{FONT_CSS}font-size:10px;color:{MUTED};'
+        )
+        row1.addWidget(email_lbl)
+
+        layout.addLayout(row1)
+
+        # Row 2: 等级 / 按钮列
+        row2 = QHBoxLayout()
+        row2.setContentsMargins(0, 0, 0, 0)
+        row2.setSpacing(6)
+        row2.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        # 等级: Plan badge
         plan = (self.account_data.get('plan_type') or 'Free').upper()
         plan_badge = QLabel(f" {plan} ")
         set_theme_style(
             plan_badge,
-            f'{FONT_CSS}font-size:10px;background:{SELECTED};color:{PRIMARY};border-radius:4px;padding:1px 4px;'
+            f'{FONT_CSS}font-size:9.5px;font-weight:500;background:{SELECTED};color:{PRIMARY};border-radius:3px;padding:2px 5px;'
         )
-        top_row.addWidget(plan_badge)
+        row2.addWidget(plan_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        row2.addStretch()
+
+        # 按钮列: 切换按钮 / 详情按钮 / 操作按钮
         if is_active:
-            active_badge = QLabel(' 当前生效 ')
+            self.switch_btn = QPushButton('当前账户')
+            self.switch_btn.setFixedSize(64, 24)
+            self.switch_btn.setEnabled(False)
             set_theme_style(
-                active_badge,
-                f'{FONT_CSS}font-size:10px;background:{PRIMARY};color:{ON_PRIMARY};border-radius:4px;padding:1px 4px;'
+                self.switch_btn,
+                f'QPushButton{{{FONT_CSS}font-size:11px;font-weight:600;background:{PRIMARY};color:{ON_PRIMARY};border:0;border-radius:4px;padding:0;}}'
+                f'QPushButton:disabled{{{FONT_CSS}font-size:11px;font-weight:600;background:{PRIMARY};color:{ON_PRIMARY};border:0;}}'
             )
-            top_row.addWidget(active_badge)
-
-        top_row.addStretch()
-
-        # Action buttons
-        if not is_active:
-            switch_btn = QPushButton('切换至此')
-            switch_btn.setFixedHeight(24)
+            self.switch_btn.setToolTip('当前正在生效的活跃账户')
+        else:
+            self.switch_btn = QPushButton('切换账户')
+            self.switch_btn.setFixedSize(64, 24)
+            self.switch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             set_theme_style(
-                switch_btn,
-                f'{FONT_CSS}font-size:11px;background:{PRIMARY};color:{ON_PRIMARY};border-radius:5px;padding:2px 8px;'
+                self.switch_btn,
+                f'QPushButton{{{FONT_CSS}font-size:11px;font-weight:500;background:{PRIMARY};color:{ON_PRIMARY};border:0;border-radius:4px;padding:0;}}'
                 f'QPushButton:hover{{background:{PRIMARY_PRESSED};}}'
+                f'QPushButton:pressed{{background:#4d3c62;}}'
+                f'QPushButton:disabled{{background:{TRACK};color:{MUTED};}}'
             )
-            switch_btn.clicked.connect(lambda: self.switchRequested.emit(self.acc_id))
-            top_row.addWidget(switch_btn)
+            self.switch_btn.setToolTip('切换至此账户并同步重启 Codex')
+            self.switch_btn.clicked.connect(lambda: self.switchRequested.emit(self.acc_id))
+            self.action_buttons.append(self.switch_btn)
+        row2.addWidget(self.switch_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        refresh_card_btn = QPushButton('刷新')
-        refresh_card_btn.setFixedHeight(24)
+        self.details_btn = QPushButton('详情 ▴' if is_active else '详情 ▾')
+        self.details_btn.setFixedSize(54, 24)
+        self.details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         set_theme_style(
-            refresh_card_btn,
-            f'{FONT_CSS}font-size:11px;background:transparent;color:{PRIMARY};border:1px solid {BORDER};border-radius:5px;padding:2px 6px;'
-            f'QPushButton:hover{{background:{SELECTED};border-color:{PRIMARY};}}'
+            self.details_btn,
+            f'QPushButton{{{FONT_CSS}font-size:11px;background:transparent;color:{PRIMARY};border:1px solid {BORDER};border-radius:4px;padding:0;}}'
+            f'QPushButton:hover{{background:{SELECTED};border-color:{PRIMARY};color:{INK};}}'
+            f'QPushButton:pressed{{background:{BORDER};color:{INK};}}'
         )
-        refresh_card_btn.setToolTip('刷新此账户凭据有效期并测算实时额度')
-        refresh_card_btn.clicked.connect(lambda: self.refreshRequested.emit(self.acc_id))
-        top_row.addWidget(refresh_card_btn)
+        self.details_btn.setToolTip('展开/折叠额度与凭据到期时间')
+        self.details_btn.clicked.connect(self._toggle_details)
+        row2.addWidget(self.details_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        rename_btn = QPushButton('改名')
-        rename_btn.setFixedHeight(24)
+        self.ops_btn = QPushButton('操作 ▾')
+        self.ops_btn.setFixedSize(54, 24)
+        self.ops_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         set_theme_style(
-            rename_btn,
-            f'{FONT_CSS}font-size:11px;background:transparent;color:{MUTED};border:1px solid {BORDER};border-radius:5px;padding:2px 6px;'
-            f'QPushButton:hover{{background:{SELECTED};color:{INK};}}'
+            self.ops_btn,
+            f'QPushButton{{{FONT_CSS}font-size:11px;background:transparent;color:{MUTED};border:1px solid {BORDER};border-radius:4px;padding:0;}}'
+            f'QPushButton:hover{{background:{SELECTED};color:{INK};border-color:{PRIMARY};}}'
+            f'QPushButton:pressed{{background:{BORDER};color:{INK};}}'
+            f'QPushButton:disabled{{color:{MUTED};border-color:{TRACK};}}'
         )
-        rename_btn.clicked.connect(lambda: self.renameRequested.emit(self.acc_id))
-        top_row.addWidget(rename_btn)
+        self.ops_btn.setToolTip('管理此账户（刷新、改名、删除）')
+        self.ops_btn.clicked.connect(self._show_actions_menu)
+        row2.addWidget(self.ops_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.action_buttons.append(self.ops_btn)
 
-        del_btn = QPushButton('删除')
-        del_btn.setFixedHeight(24)
+        layout.addLayout(row2)
+
+        # Details Panel: 凭证有效期、本周周额度、五小时额度（全部带紧凑进度条）
+        self.details_widget = QWidget()
+        self.details_widget.setObjectName('details_panel')
         set_theme_style(
-            del_btn,
-            f'{FONT_CSS}font-size:11px;background:transparent;color:{DANGER};border:1px solid {BORDER};border-radius:5px;padding:2px 6px;'
-            f'QPushButton:hover{{background:{DANGER_SURFACE};border-color:{DANGER};}}'
+            self.details_widget,
+            f'QWidget#details_panel{{background:#faf8fc;border:1px solid {BORDER};border-radius:6px;}}'
         )
-        del_btn.clicked.connect(lambda: self.deleteRequested.emit(self.acc_id))
-        top_row.addWidget(del_btn)
+        details_layout = QVBoxLayout(self.details_widget)
+        details_layout.setContentsMargins(10, 8, 10, 8)
+        details_layout.setSpacing(6)
 
-        layout.addLayout(top_row)
-
-        # Meta row: Email + Token Expiry Info
-        meta_row = QHBoxLayout()
-        meta_row.setContentsMargins(0, 0, 0, 0)
-        meta_row.setSpacing(8)
-
-        email = self.account_data.get('email') or '无关联邮箱'
-        email_lbl = QLabel(email)
-        set_theme_style(email_lbl, f'{FONT_CSS}font-size:11px;color:{MUTED};')
-        meta_row.addWidget(email_lbl)
-
+        # 1. 凭证有效期（满值为 10 天）
         exp = self.account_data.get('expires_at')
         if exp:
             exp_sec = exp - time.time()
             days = int(exp_sec // 86400)
             hours = int((exp_sec % 86400) // 3600)
             mins = int((exp_sec % 3600) // 60)
-            if days > 0:
-                exp_str = f"凭证有效: {days} 天 {hours} 小时"
-            elif hours > 0:
-                exp_str = f"凭证有效: {hours} 小时 {mins} 分"
-            elif exp_sec > 0:
-                exp_str = f"凭证有效: {mins} 分 (即将到期)"
-            else:
-                exp_str = "凭证已到期 (需刷新)"
             exp_time = time.strftime('%m-%d %H:%M', time.localtime(exp))
-            full_exp_str = f"{exp_str} (至 {exp_time})"
-            exp_lbl = QLabel(full_exp_str)
-            set_theme_style(
-                exp_lbl,
-                f'{FONT_CSS}font-size:11px;color:{PRIMARY if exp_sec > 3600 else DANGER};'
-            )
-            meta_row.addWidget(exp_lbl)
+            if days > 0:
+                exp_text = f"{days}天{hours}h (至 {exp_time})"
+            elif hours > 0:
+                exp_text = f"{hours}h{mins}m (至 {exp_time})"
+            elif exp_sec > 0:
+                exp_text = f"{mins}分钟 (即将到期)"
+            else:
+                exp_text = "已到期 (需刷新)"
 
-        meta_row.addStretch()
-        layout.addLayout(meta_row)
+            # 满值为 10 天 (10 * 86400 秒)
+            max_token_sec = 10 * 86400.0
+            exp_pct = max(0.0, min(100.0, (exp_sec / max_token_sec) * 100.0))
+            is_danger = exp_sec <= 3600
+            is_warn = 3600 < exp_sec <= 86400
+        else:
+            exp_text = "长期有效 / 待检测"
+            exp_pct = 100.0
+            is_danger = False
+            is_warn = False
 
-        # Quota row
+        details_layout.addWidget(
+            self._create_progress_row('凭证有效期：', exp_text, exp_pct, is_danger=is_danger, is_warn=is_warn)
+        )
+
+        # 2. 本周周额度
         quota = self.account_data.get('quota', {})
         windows = quota.get('windows', [])
-        if windows:
-            quota_row = QHBoxLayout()
-            quota_row.setContentsMargins(0, 0, 0, 0)
-            quota_row.setSpacing(8)
-            for w in windows:
-                name = w.get('name', '额度')
-                rem = w.get('remaining')
-                rem_str = f"{round(rem, 1)}%" if rem is not None else "未知"
-                reset_ts = w.get('resetsAt')
-                reset_info = ''
-                if reset_ts and reset_ts > time.time():
-                    diff = reset_ts - time.time()
-                    if diff > 3600:
-                        reset_info = f" ({int(diff//3600)}h{int((diff%3600)//60)}m重置)"
-                    else:
-                        reset_info = f" ({int(diff//60)}m重置)"
-                q_lbl = QLabel(f"{name} 剩余 {rem_str}{reset_info}")
-                set_theme_style(q_lbl, f'{FONT_CSS}font-size:10px;color:{PRIMARY};font-weight:500;')
-                quota_row.addWidget(q_lbl)
-            quota_row.addStretch()
-            layout.addLayout(quota_row)
+        week_win = next(
+            (w for w in windows if '周' in w.get('name', '') or w.get('name') == '一周'),
+            None
+        )
+        if not week_win and len(windows) >= 2:
+            week_win = windows[1]
+
+        if week_win:
+            w_rem = week_win.get('remaining')
+            week_pct = float(w_rem) if w_rem is not None else 0.0
+            reset_ts = week_win.get('resetsAt')
+            reset_str = ''
+            if reset_ts and reset_ts > time.time():
+                diff = reset_ts - time.time()
+                if diff > 86400:
+                    reset_str = f" ({int(diff//86400)}天重置)"
+                elif diff > 3600:
+                    reset_str = f" ({int(diff//3600)}h重置)"
+                else:
+                    reset_str = f" ({int(diff//60)}m重置)"
+            week_text = f"剩余 {round(week_pct, 1)}%{reset_str}" if w_rem is not None else "未知"
+            w_danger = week_pct <= 10.0
+            w_warn = 10.0 < week_pct <= 30.0
         else:
-            quota_row = QHBoxLayout()
-            quota_row.setContentsMargins(0, 0, 0, 0)
-            quota_row.setSpacing(6)
-            q_tip = QLabel('额度未获取（点击右上方「刷新」即可测算额度）')
-            set_theme_style(q_tip, f'{FONT_CSS}font-size:10px;color:{MUTED};font-style:italic;')
-            quota_row.addWidget(q_tip)
-            quota_row.addStretch()
-            layout.addLayout(quota_row)
+            week_pct = 0.0
+            week_text = "未获取"
+            w_danger = False
+            w_warn = False
+
+        details_layout.addWidget(
+            self._create_progress_row('本周周额度：', week_text, week_pct, is_danger=w_danger, is_warn=w_warn)
+        )
+
+        # 3. 五小时额度
+        five_win = next(
+            (w for w in windows if '5小时' in w.get('name', '') or '5h' in w.get('name', '').lower()),
+            None
+        )
+        if not five_win and len(windows) >= 1:
+            five_win = windows[0]
+
+        if five_win:
+            f_rem = five_win.get('remaining')
+            five_pct = float(f_rem) if f_rem is not None else 0.0
+            reset_ts = five_win.get('resetsAt')
+            reset_str = ''
+            if reset_ts and reset_ts > time.time():
+                diff = reset_ts - time.time()
+                if diff > 3600:
+                    reset_str = f" ({int(diff//3600)}h{int((diff%3600)//60)}m重置)"
+                else:
+                    reset_str = f" ({int(diff//60)}m重置)"
+            five_text = f"剩余 {round(five_pct, 1)}%{reset_str}" if f_rem is not None else "未知"
+            f_danger = five_pct <= 10.0
+            f_warn = 10.0 < five_pct <= 30.0
+        else:
+            five_pct = 0.0
+            five_text = "未获取"
+            f_danger = False
+            f_warn = False
+
+        details_layout.addWidget(
+            self._create_progress_row('五小时额度：', five_text, five_pct, is_danger=f_danger, is_warn=f_warn)
+        )
+
+        self.details_widget.setVisible(is_active)
+        layout.addWidget(self.details_widget)
+
+    def _create_progress_row(self, title: str, value_text: str, percent: float, is_danger: bool = False, is_warn: bool = False):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+
+        title_lbl = QLabel(title)
+        title_lbl.setFixedWidth(66)
+        set_theme_style(title_lbl, f'{FONT_CSS}font-size:10.5px;color:{INK};font-weight:500;')
+        row_layout.addWidget(title_lbl)
+
+        bar = QProgressBar()
+        bar.setRange(0, 100)
+        bar.setValue(int(round(max(0.0, min(100.0, percent)))))
+        bar.setTextVisible(False)
+        bar.setFixedWidth(96)
+        bar.setFixedHeight(6)
+
+        if is_danger:
+            bar_color = DANGER
+            txt_color = DANGER
+        elif is_warn:
+            bar_color = '#b87428'
+            txt_color = '#b87428'
+        else:
+            bar_color = PRIMARY
+            txt_color = PRIMARY
+
+        set_theme_style(
+            bar,
+            f'QProgressBar{{border:0;border-radius:3px;background:{TRACK};}}'
+            f'QProgressBar::chunk{{border-radius:3px;background:{bar_color};}}'
+        )
+        row_layout.addWidget(bar)
+
+        val_lbl = QLabel(value_text)
+        val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        val_lbl.setMinimumWidth(0)
+        val_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        val_lbl.setToolTip(value_text)
+        set_theme_style(val_lbl, f'{FONT_CSS}font-size:10px;color:{txt_color};font-weight:500;')
+        row_layout.addWidget(val_lbl)
+
+        return row_widget
+
+    def _toggle_details(self):
+        show = self.details_widget.isHidden()
+        self.details_widget.setVisible(show)
+        self.details_btn.setText('详情 ▴' if show else '详情 ▾')
+
+    def _show_actions_menu(self):
+        menu = QMenu(self)
+        menu.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_theme_style(
+            menu,
+            f'''
+            QMenu {{
+                background: {SURFACE};
+                border: 1px solid {BORDER};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 11px;
+                color: {INK};
+                padding: 5px 16px 5px 12px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background: {SELECTED};
+                color: {PRIMARY};
+            }}
+            '''
+        )
+        act_refresh = menu.addAction('🔄 刷新凭据与额度')
+        act_rename = menu.addAction('✏️ 修改账户别名')
+        act_del = menu.addAction('🗑️ 删除此账户')
+
+        pos = self.ops_btn.mapToGlobal(QPoint(0, self.ops_btn.height() + 2))
+        selected = menu.exec(pos)
+        if selected == act_refresh:
+            self.refreshRequested.emit(self.acc_id)
+        elif selected == act_rename:
+            self.renameRequested.emit(self.acc_id)
+        elif selected == act_del:
+            self.deleteRequested.emit(self.acc_id)
+
+    def set_actions_enabled(self, enabled: bool):
+        is_active = self.account_data.get('is_active', False)
+        if not is_active and self.switch_btn:
+            self.switch_btn.setEnabled(enabled)
+        self.ops_btn.setEnabled(enabled)
 
 
 
@@ -255,62 +423,90 @@ class CodexAccountsPane(QWidget):
         top_box.addWidget(desc)
         main_layout.addLayout(top_box)
 
-        # Action Toolbar
-        action_bar = QHBoxLayout()
-        action_bar.setContentsMargins(0, 2, 0, 2)
-        action_bar.setSpacing(6)
+        # Action Toolbar (Single row: 新增账户 / 导入账户 / 全部刷新 / 全部续期)
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 2, 0, 2)
+        toolbar.setSpacing(6)
 
-        self.login_btn = QPushButton('+ 新增账户 (直接登录)')
+        self.login_btn = QPushButton('新增账户')
         self.login_btn.setFixedHeight(28)
+        self.login_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.login_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         set_theme_style(
             self.login_btn,
-            f'{FONT_CSS}font-size:11px;font-weight:600;background:{PRIMARY};color:{ON_PRIMARY};border-radius:6px;padding:3px 10px;'
+            f'QPushButton{{{FONT_CSS}font-size:11px;font-weight:600;background:{PRIMARY};color:{ON_PRIMARY};border:0;border-radius:6px;padding:3px 4px;}}'
             f'QPushButton:hover{{background:{PRIMARY_PRESSED};}}'
+            f'QPushButton:pressed{{background:#4d3c62;}}'
+            f'QPushButton:disabled{{background:{TRACK};color:{MUTED};}}'
         )
-        self.login_btn.setToolTip('直接拉起系统默认浏览器打开 Codex 官方登录授权页')
+        self.login_btn.setToolTip('拉起系统默认浏览器打开 Codex 官方登录授权页')
         self.login_btn.clicked.connect(self.login_new_direct)
-        action_bar.addWidget(self.login_btn)
+        toolbar.addWidget(self.login_btn)
 
-        self.refresh_all_btn = QPushButton('全部刷新')
-        self.refresh_all_btn.setFixedHeight(28)
-        set_theme_style(
-            self.refresh_all_btn,
-            f'{FONT_CSS}font-size:11px;font-weight:600;background:{SELECTED};color:{PRIMARY};border:1px solid {BORDER};border-radius:6px;padding:3px 8px;'
-            f'QPushButton:hover{{background:{BORDER};color:{INK};}}'
-        )
-        self.refresh_all_btn.setToolTip('一键刷新所有账户的凭据有效期并测算实时额度')
-        self.refresh_all_btn.clicked.connect(self.refresh_all)
-        action_bar.addWidget(self.refresh_all_btn)
-
-        self.import_btn = QPushButton('导入当前登录')
+        self.import_btn = QPushButton('导入账户')
         self.import_btn.setFixedHeight(28)
+        self.import_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         set_theme_style(
             self.import_btn,
-            f'{FONT_CSS}font-size:11px;background:{SELECTED};color:{PRIMARY};border-radius:6px;padding:3px 8px;'
-            f'QPushButton:hover{{background:{BORDER};}}'
+            f'QPushButton{{{FONT_CSS}font-size:11px;font-weight:500;background:{SELECTED};color:{PRIMARY};border:1px solid {BORDER};border-radius:6px;padding:3px 4px;}}'
+            f'QPushButton:hover{{background:{BORDER};color:{INK};border-color:{PRIMARY};}}'
+            f'QPushButton:pressed{{background:#ded2e7;color:{INK};}}'
+            f'QPushButton:disabled{{background:{PANEL};color:{MUTED};border-color:transparent;}}'
         )
         self.import_btn.setToolTip('导入当前系统已生效的 Codex 登录凭据')
         self.import_btn.clicked.connect(self.import_current)
-        action_bar.addWidget(self.import_btn)
+        toolbar.addWidget(self.import_btn)
 
-        self.renew_all_btn = QPushButton('自动续期')
+        self.refresh_all_btn = QPushButton('全部刷新')
+        self.refresh_all_btn.setFixedHeight(28)
+        self.refresh_all_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.refresh_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_theme_style(
+            self.refresh_all_btn,
+            f'QPushButton{{{FONT_CSS}font-size:11px;background:transparent;color:{PRIMARY};border:1px solid {BORDER};border-radius:6px;padding:3px 4px;}}'
+            f'QPushButton:hover{{background:{SELECTED};color:{INK};border-color:{PRIMARY};}}'
+            f'QPushButton:pressed{{background:{BORDER};color:{INK};}}'
+            f'QPushButton:disabled{{color:{MUTED};border-color:{TRACK};}}'
+        )
+        self.refresh_all_btn.setToolTip('一键刷新所有账户的凭据有效期并测算实时额度')
+        self.refresh_all_btn.clicked.connect(self.refresh_all)
+        toolbar.addWidget(self.refresh_all_btn)
+
+        self.renew_all_btn = QPushButton('全部续期')
         self.renew_all_btn.setFixedHeight(28)
+        self.renew_all_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.renew_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         set_theme_style(
             self.renew_all_btn,
-            f'{FONT_CSS}font-size:11px;background:{PANEL};color:{MUTED};border-radius:6px;padding:3px 8px;'
-            f'QPushButton:hover{{background:{BORDER};color:{INK};}}'
+            f'QPushButton{{{FONT_CSS}font-size:11px;background:transparent;color:{MUTED};border:1px solid {BORDER};border-radius:6px;padding:3px 4px;}}'
+            f'QPushButton:hover{{background:{SELECTED};color:{INK};border-color:{PRIMARY};}}'
+            f'QPushButton:pressed{{background:{BORDER};color:{INK};}}'
+            f'QPushButton:disabled{{color:{MUTED};border-color:{TRACK};}}'
         )
         self.renew_all_btn.setToolTip('一键续期所有托管账户的凭据')
         self.renew_all_btn.clicked.connect(self.renew_all)
-        action_bar.addWidget(self.renew_all_btn)
+        toolbar.addWidget(self.renew_all_btn)
 
-        action_bar.addStretch()
-        main_layout.addLayout(action_bar)
+        main_layout.addLayout(toolbar)
 
-        # Status and Progress Line
+        # Status and Feedback Banner
+        self.status_banner = QWidget()
+        self.status_banner.setObjectName('status_banner')
+        self.status_banner.setMinimumHeight(28)
+        self.status_banner.hide()
+        sb_layout = QHBoxLayout(self.status_banner)
+        sb_layout.setContentsMargins(8, 4, 8, 4)
+        sb_layout.setSpacing(6)
+
+        self.status_icon = QLabel('')
+        sb_layout.addWidget(self.status_icon)
+
         self.status_line = QLabel('')
-        set_theme_style(self.status_line, f'{FONT_CSS}font-size:11px;color:{PRIMARY};')
-        main_layout.addWidget(self.status_line)
+        self.status_line.setWordWrap(True)
+        sb_layout.addWidget(self.status_line, 1)
+
+        main_layout.addWidget(self.status_banner)
 
         # Accounts List Scroll Area
         self.scroll = hide_scrollbars(QScrollArea())
@@ -331,24 +527,36 @@ class CodexAccountsPane(QWidget):
     def refresh_list(self):
         while self.card_layout.count() > 1:
             item = self.card_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            w = item.widget() if item else None
+            if w:
+                w.setParent(None)
+                w.deleteLater()
 
         accounts = self.manager.list_accounts()
         if not accounts:
-            empty = QLabel('当前尚未保存任何托管账户。\n点击上方“+ 新增账户 (直接登录)”拉起授权，或“导入当前登录”。')
+            empty = QLabel('当前尚未保存任何托管账户。\n点击上方“新增账户”拉起授权，或“导入账户”。')
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             set_theme_style(empty, f'{FONT_CSS}font-size:11px;color:{MUTED};padding:30px 10px;')
             self.card_layout.insertWidget(0, empty)
             return
 
         for i, acc in enumerate(accounts):
+            if i > 0:
+                sep = QFrame()
+                sep.setObjectName('card_divider')
+                sep.setFixedHeight(1)
+                set_theme_style(
+                    sep,
+                    'QFrame#card_divider { background-color: rgba(117, 97, 141, 0.25); border: none; margin: 3px 4px; }'
+                )
+                self.card_layout.insertWidget(self.card_layout.count() - 1, sep)
+
             card = AccountCard(acc)
             card.switchRequested.connect(self.on_switch_requested)
             card.refreshRequested.connect(self.on_refresh_requested)
             card.renameRequested.connect(self.on_rename_requested)
             card.deleteRequested.connect(self.on_delete_requested)
-            self.card_layout.insertWidget(i, card)
+            self.card_layout.insertWidget(self.card_layout.count() - 1, card)
 
         self._check_auto_probe_missing_quotas(accounts)
 
@@ -371,13 +579,49 @@ class CodexAccountsPane(QWidget):
             worker.failed.connect(lambda _: setattr(self, '_probing_missing', False))
             worker.start()
 
-    def set_busy(self, busy: bool, message: str = ''):
+    def set_busy(self, busy: bool, message: str = '', status_type: str = 'info'):
         self.import_btn.setEnabled(not busy)
         self.login_btn.setEnabled(not busy)
         if hasattr(self, 'refresh_all_btn'):
             self.refresh_all_btn.setEnabled(not busy)
         self.renew_all_btn.setEnabled(not busy)
+
+        for i in range(self.card_layout.count()):
+            item = self.card_layout.itemAt(i)
+            if item and item.widget() and hasattr(item.widget(), 'set_actions_enabled'):
+                item.widget().set_actions_enabled(not busy)
+
+        if hasattr(self, '_status_timer') and self._status_timer:
+            self._status_timer.stop()
+            self._status_timer = None
+
+        if not message:
+            self.status_banner.hide()
+            return
+
+        self.status_banner.show()
         self.status_line.setText(message)
+        if busy or status_type == 'loading':
+            self.status_icon.setText('⏳')
+            set_theme_style(self.status_banner, f'QWidget#status_banner{{background:#f2edf7;border:1px solid {BORDER};border-radius:6px;}}')
+            set_theme_style(self.status_line, f'{FONT_CSS}font-size:11px;color:{PRIMARY};font-weight:500;')
+        elif status_type == 'success':
+            self.status_icon.setText('✓')
+            set_theme_style(self.status_banner, f'QWidget#status_banner{{background:#edf7f2;border:1px solid #c2e3d3;border-radius:6px;}}')
+            set_theme_style(self.status_line, f'{FONT_CSS}font-size:11px;color:#28634e;font-weight:500;')
+            # Auto-hide success feedback after at most 10 seconds
+            self._status_timer = QTimer(self)
+            self._status_timer.setSingleShot(True)
+            self._status_timer.timeout.connect(self.status_banner.hide)
+            self._status_timer.start(10000)
+        elif status_type == 'error':
+            self.status_icon.setText('✕')
+            set_theme_style(self.status_banner, f'QWidget#status_banner{{background:{DANGER_SURFACE};border:1px solid #ecc5d8;border-radius:6px;}}')
+            set_theme_style(self.status_line, f'{FONT_CSS}font-size:11px;color:{DANGER};font-weight:500;')
+        else:
+            self.status_icon.setText('ℹ')
+            set_theme_style(self.status_banner, f'QWidget#status_banner{{background:{PANEL};border:1px solid {BORDER};border-radius:6px;}}')
+            set_theme_style(self.status_line, f'{FONT_CSS}font-size:11px;color:{INK};')
 
 
     def import_current(self):
@@ -389,14 +633,15 @@ class CodexAccountsPane(QWidget):
             if not ok:
                 return
             acc = self.manager.import_current_account(alias.strip())
-            self.set_busy(False, f'已成功导入账户：{acc.get("alias")}')
+            self.set_busy(False, f'已成功导入账户：{acc.get("alias")}', 'success')
             self.refresh_list()
         except Exception as error:
+            self.set_busy(False, f'导入失败：{error}', 'error')
             QMessageBox.warning(self, '导入失败', str(error))
 
     def login_new_direct(self):
         """Directly launch login in browser without extra confirmation dialogs."""
-        self.set_busy(True, '正在拉起官方登录通道，请在浏览器中完成授权…')
+        self.set_busy(True, '正在拉起官方登录通道，请在浏览器中完成授权…', 'loading')
 
         from codex_connection import find_executable, child_environment, cli_command
 
@@ -422,7 +667,7 @@ class CodexAccountsPane(QWidget):
         self.active_worker = worker
 
         def on_done(auth_data):
-            self.set_busy(False, '登录成功，正在保存档案…')
+            self.set_busy(False, '登录成功，正在保存档案…', 'loading')
             try:
                 from codex_account_manager import extract_account_metadata
                 from codex_account_vault import vault_encrypt
@@ -450,12 +695,12 @@ class CodexAccountsPane(QWidget):
                     self.manager._accounts[acc_id] = record
                     self.manager._save_vault()
                 self.refresh_list()
-                self.set_busy(False, f'新账户 [{record["alias"]}] 已成功加入托管！')
+                self.set_busy(False, f'新账户 [{record["alias"]}] 已成功加入托管！', 'success')
             finally:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
         def on_fail(err):
-            self.set_busy(False, '')
+            self.set_busy(False, f'登录未完成：{err}', 'error')
             shutil.rmtree(temp_dir, ignore_errors=True)
             QMessageBox.warning(self, '登录未完成', str(err))
 
@@ -466,7 +711,7 @@ class CodexAccountsPane(QWidget):
     def on_switch_requested(self, account_id: str):
         acc = self.manager.get_account(account_id)
         alias = acc.get('alias', '') if acc else account_id
-        self.set_busy(True, f'正在切换至账户 [{alias}] 并同步重启 Codex…')
+        self.set_busy(True, f'正在切换至账户 [{alias}] 并同步重启 Codex…', 'loading')
 
         def switch_job():
             self.manager.switch_account(account_id, restart_codex=True)
@@ -481,12 +726,12 @@ class CodexAccountsPane(QWidget):
         self.active_worker = worker
 
         def on_done(res):
-            self.set_busy(False, f'已成功切换至账户 [{alias}]，Codex 已同步重启！')
+            self.set_busy(False, f'已成功切换至账户 [{alias}]，Codex 已同步重启！', 'success')
             self.refresh_list()
             self.accountChanged.emit(account_id)
 
         def on_fail(err):
-            self.set_busy(False, '')
+            self.set_busy(False, f'切换失败：{err}', 'error')
             QMessageBox.critical(self, '切换失败', f'切换账户出现错误：{err}')
 
         worker.finished.connect(on_done)
@@ -496,17 +741,17 @@ class CodexAccountsPane(QWidget):
     def on_refresh_requested(self, account_id: str):
         acc = self.manager.get_account(account_id)
         alias = acc.get('alias', '') if acc else account_id
-        self.set_busy(True, f'正在刷新 [{alias}] 凭据有效期与实时额度…')
+        self.set_busy(True, f'正在刷新 [{alias}] 凭据有效期与实时额度…', 'loading')
 
         worker = AccountWorker(self.manager.refresh_and_probe_account, account_id, parent=self)
         self.active_worker = worker
 
         def on_done(res):
-            self.set_busy(False, f'[{alias}] 凭据有效期与实时额度已更新！')
+            self.set_busy(False, f'[{alias}] 凭据有效期与实时额度已更新！', 'success')
             self.refresh_list()
 
         def on_fail(err):
-            self.set_busy(False, '')
+            self.set_busy(False, f'刷新失败：{err}', 'error')
             QMessageBox.warning(self, '刷新失败', f'无法刷新该账户：{err}')
 
         worker.finished.connect(on_done)
@@ -514,16 +759,16 @@ class CodexAccountsPane(QWidget):
         worker.start()
 
     def refresh_all(self):
-        self.set_busy(True, '正在刷新所有账户的凭据有效期并测算实时额度…')
+        self.set_busy(True, '正在刷新所有账户的凭据有效期并测算实时额度…', 'loading')
         worker = AccountWorker(lambda: self.manager.refresh_all_accounts(force=True), parent=self)
         self.active_worker = worker
 
         def on_done(results):
-            self.set_busy(False, '所有账户凭据有效期与实时额度已更新！')
+            self.set_busy(False, '所有账户凭据有效期与实时额度已更新！', 'success')
             self.refresh_list()
 
         def on_fail(err):
-            self.set_busy(False, '')
+            self.set_busy(False, f'刷新异常：{err}', 'error')
             QMessageBox.warning(self, '刷新异常', str(err))
 
         worker.finished.connect(on_done)
@@ -556,17 +801,17 @@ class CodexAccountsPane(QWidget):
             QMessageBox.warning(self, '删除失败', str(error))
 
     def renew_all(self):
-        self.set_busy(True, '正在自动巡检并续期所有托管账户…')
+        self.set_busy(True, '正在自动巡检并续期所有托管账户…', 'loading')
         worker = AccountWorker(self.manager.refresh_all_accounts, parent=self)
         self.active_worker = worker
 
         def on_done(results):
-            self.set_busy(False, '所有账户续期巡检完成！')
+            self.set_busy(False, '所有账户续期巡检完成！', 'success')
             self.refresh_list()
             QMessageBox.information(self, '续期完成', '所有账户凭据已完成续期巡检，保持有效。')
 
         def on_fail(err):
-            self.set_busy(False, '')
+            self.set_busy(False, f'续期出现异常：{err}', 'error')
             QMessageBox.warning(self, '续期出现异常', str(err))
 
         worker.finished.connect(on_done)

@@ -117,7 +117,9 @@ class SettingsDialog(QDialog):
         self.apply_button=SettingsFooterButton('保存',primary=True);self.apply_button.clicked.connect(self.apply);row.addWidget(self.apply_button)
         if not embedded:
             button=QPushButton('关闭');button.clicked.connect(self.dismiss);row.addWidget(button)
-        for control in self.findChildren(QPushButton):control.setAutoDefault(False)
+        for control in self.findChildren(QPushButton):
+            control.setAutoDefault(False)
+            control.setCursor(Qt.CursorShape.PointingHandCursor)
         self.apply_button.setProperty('role','primary');self.apply_button.setAutoDefault(True);self.apply_button.setDefault(True)
         self.save_shortcut=QShortcut(QKeySequence('Ctrl+S'),self);self.save_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);self.save_shortcut.activated.connect(self.apply)
         self.tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -134,7 +136,9 @@ class SettingsDialog(QDialog):
             self.fill(self.draft.values)
             if index==3:self.refresh_library()
             self.update_draft_state()
-        for button in self.tabs.widget(index).findChildren(QPushButton):button.setAutoDefault(False)
+        for button in self.tabs.widget(index).findChildren(QPushButton):
+            button.setAutoDefault(False)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._writing_widgets=False
     def activate_page(self,index):
         from settings_controls import motion_enabled
