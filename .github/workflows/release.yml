@@ -109,6 +109,9 @@ jobs:
           cp -r app/sounds "$RESOURCES/app/"
           cp "outputs/白龙桌宠素材/素材清单.json" "$RESOURCES/outputs/白龙桌宠素材/"
 
+          # 对组装后的 .app Bundle 重新进行自签名（Ad-hoc Signing），避免文件增补破坏签名一致性
+          codesign --force --deep --sign - "$BUNDLE"
+
           VERSION="${{ github.ref_name }}"
           if [ -z "$VERSION" ] || [[ "$VERSION" != v* ]]; then
             VERSION="${{ github.event.inputs.tag_name || 'v1.10.0' }}"
