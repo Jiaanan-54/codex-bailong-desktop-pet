@@ -218,6 +218,21 @@ def open_codex(session=None):
         if terminal:subprocess.Popen([terminal,'new-tab','--title','Codex WSL',*target],creationflags=0x08000000 if os.name=='nt' else 0)
         else:subprocess.Popen(target,creationflags=getattr(subprocess,'CREATE_NEW_CONSOLE',0))
         return
+    if sys.platform == 'darwin':
+        if session is not None:
+            url=codex_conversation_url(session)
+            try:subprocess.run(['open',url],check=True);return
+            except Exception:raise OSError('无法打开对应会话，请确认 Codex 或 ChatGPT 已安装并支持会话链接') from None
+        for app_name in ('ChatGPT', 'Codex'):
+            res = subprocess.run(['open', '-a', app_name], capture_output=True)
+            if res.returncode == 0:
+                return
+        try:
+            subprocess.run(['open', 'codex://'], check=True)
+            return
+        except Exception:
+            pass
+        raise OSError('未找到 Codex 或 ChatGPT 安装，请先安装或打开一次')
     if session is not None:
         url=codex_conversation_url(session)
         try:os.startfile(url)
@@ -257,15 +272,20 @@ def restart_codex_desktop():
     import psutil, time, os, sys, subprocess
 
     if sys.platform == 'darwin':
-        try:
-            subprocess.run(['osascript', '-e', 'quit app "Codex"'], timeout=3)
-        except Exception:
-            subprocess.run(['pkill', '-f', 'Codex'], timeout=3)
+        for app_name in ('ChatGPT', 'Codex'):
+            try:
+                subprocess.run(['osascript', '-e', f'quit app "{app_name}"'], timeout=2)
+            except Exception:
+                pass
         time.sleep(1.0)
+        for app_name in ('ChatGPT', 'Codex'):
+            res = subprocess.run(['open', '-a', app_name], capture_output=True)
+            if res.returncode == 0:
+                return True
         try:
-            subprocess.run(['open', '-a', 'Codex'], timeout=5)
-        except Exception:
             subprocess.run(['open', 'codex://'], timeout=5)
+        except Exception:
+            pass
         return True
 
     # Windows: scan and terminate existing Codex / ChatGPT GUI processes
