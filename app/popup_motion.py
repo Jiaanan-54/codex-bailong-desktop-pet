@@ -186,6 +186,7 @@ class AnimatedContextMenu(QMenu):
 
 
 def ContextMenu(parent=None):
-    # QMenu.exec on Windows 11 must retain the platform menu implementation.
-    if QApplication.platformName()=='windows':return QMenu(parent)
+    # QMenu.exec on Windows and macOS must retain the native platform menu implementation.
+    if QApplication.platformName() in ('windows','cocoa') or sys.platform in ('win32','darwin'):
+        return QMenu(parent)
     return AnimatedContextMenu(parent)
