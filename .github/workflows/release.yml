@@ -83,14 +83,12 @@ jobs:
 
           $installerExe = "dist/$installerBaseName.exe"
           Copy-Item -Path $installerExe -Destination "bailong-desktop-pet-$version-setup.exe" -Force
-          Copy-Item -Path $installerExe -Destination "白龙桌宠-$version-安装程序.exe" -Force
-          Copy-Item -Path $installerExe -Destination "白龙桌宠-$version-一键部署.exe" -Force
 
           # 4. Create Windows user distribution zip (containing installer and quick deployment docs)
           $bundleFolder = "bailong-desktop-pet-$version-windows-x64"
           New-Item -ItemType Directory -Path $bundleFolder -Force
           Copy-Item -Path $installerExe -Destination "$bundleFolder/bailong-desktop-pet-$version-setup.exe" -Force
-          Copy-Item -Path $installerExe -Destination "$bundleFolder/白龙桌宠-$version-安装程序.exe" -Force
+          Copy-Item -Path $installerExe -Destination "$bundleFolder/白龙桌宠-$version-一键部署.exe" -Force
           if (Test-Path "发布说明/安装管理.cmd") { Copy-Item -Path "发布说明/安装管理.cmd" -Destination "$bundleFolder/安装管理.cmd" -Force }
           if (Test-Path "发布说明/快速部署说明.txt") { Copy-Item -Path "发布说明/快速部署说明.txt" -Destination "$bundleFolder/快速部署说明.txt" -Force }
           if (Test-Path "发布说明/新增功能说明.txt") { Copy-Item -Path "发布说明/新增功能说明.txt" -Destination "$bundleFolder/新增功能说明.txt" -Force }
@@ -104,7 +102,7 @@ jobs:
           $portableZip = "bailong-desktop-pet-$version-windows-portable.zip"
           Compress-Archive -Path "$dist/*" -DestinationPath $portableZip -Force
 
-          $filesToCheck = @("bailong-desktop-pet-$version-setup.exe", "白龙桌宠-$version-安装程序.exe", "白龙桌宠-$version-一键部署.exe", $zipName, $portableZip)
+          $filesToCheck = @("bailong-desktop-pet-$version-setup.exe", $zipName, $portableZip)
           foreach ($f in $filesToCheck) {
             if (Test-Path $f) {
               $sha = (Get-FileHash -Path $f -Algorithm SHA256).Hash
