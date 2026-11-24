@@ -101,7 +101,7 @@ class GitHubRedirect(urllib.request.HTTPRedirectHandler):
 def open_url(url,headers=None):
     if not allowed_redirect(url):raise UpdateError('更新地址不受支持')
     request=urllib.request.Request(url,headers={'User-Agent':'Bailong-Desktop-Updater','Accept':'application/vnd.github+json' if url==API else 'application/octet-stream',**(headers or {})})
-    return urllib.request.build_opener(GitHubRedirect()).open(request,timeout=12)
+    return urllib.request.build_opener(GitHubRedirect()).open(request,timeout=30)
 
 def check_cancel(cancel):
     if cancel():raise UpdateCancelled('下载已暂停，可稍后继续')

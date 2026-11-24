@@ -131,6 +131,8 @@ def check_download_tree(stage,files):
             elif not path.is_file():raise MaterialError('素材文件类型无效')
 
 def download_material_archive(url,archive,maximum,expected_size,opener,cancel,progress):
+    import time
+    from http.client import HTTPException
     headers={'Accept':'application/octet-stream','Accept-Encoding':'identity'}
     offset=0
     if expected_size:
@@ -139,48 +141,67 @@ def download_material_archive(url,archive,maximum,expected_size,opener,cancel,pr
             except FileNotFoundError:pass
         if offset==expected_size:return
         if offset>expected_size:offset=0
-    cancelled(cancel)
-    try:
-        response=opener(url,dict(headers,Range=f'bytes={offset}-') if offset else headers)
-    except HTTPError as exc:
-        if not offset or exc.code not in (400,405,416):raise
-        exc.close()
+    total=expected_size or 0
+    max_retries=10
+    consecutive_errors=0
+    while True:
         cancelled(cancel)
-        response=opener(url,headers);offset=0
-    with response:
-        status=getattr(response,'status',200)
-        if response.headers.get('Content-Encoding','identity').lower()!='identity':
-            raise MaterialError('下载素材失败：响应编码不受支持')
-        if status==206 and offset:
-            wanted=f'bytes {offset}-{expected_size-1}/{expected_size}'
-            if response.headers.get('Content-Range')!=wanted:
-                raise MaterialError('下载素材失败：续传响应范围异常')
-        elif status==200:
-            offset=0
-        else:
-            raise MaterialError('下载素材失败：响应状态异常')
-        length=response.headers.get('Content-Length')
-        if length is not None:
-            try:length=int(length)
-            except ValueError as exc:raise MaterialError('下载素材失败：素材下载大小异常') from exc
-            if not 0<=length<=maximum or (expected_size and length!=expected_size-offset):
-                raise MaterialError('下载素材失败：素材下载大小异常')
-        total=expected_size or length or 0
-        cancelled(cancel)
-        with material_phase('写入下载文件'):
-            output=retry_material_io(lambda:open_download_file(archive,'ab' if offset else 'wb'),cancel)
-        with output:
-            progress(offset,total,'downloading')
-            while True:
+        if expected_size:
+            try:offset=retry_material_io(lambda:archive.stat().st_size,cancel)
+            except FileNotFoundError:offset=0
+            if offset==expected_size:return
+        try:
+            req_headers=dict(headers,Range=f'bytes={offset}-') if offset else headers
+            response=opener(url,req_headers)
+        except HTTPError as exc:
+            if not offset or exc.code not in (400,405,416):raise
+            exc.close();cancelled(cancel);response=opener(url,headers);offset=0
+        except (URLError,HTTPException,OSError,TimeoutError) as exc:
+            consecutive_errors+=1
+            if consecutive_errors>max_retries:raise
+            time.sleep(min(consecutive_errors*2,10))
+            continue
+        try:
+            with response:
+                status=getattr(response,'status',200)
+                if response.headers.get('Content-Encoding','identity').lower()!='identity':
+                    raise MaterialError('下载素材失败：响应编码不受支持')
+                if status==206 and offset:
+                    wanted=f'bytes {offset}-{expected_size-1}/{expected_size}' if expected_size else None
+                    if wanted and response.headers.get('Content-Range')!=wanted:
+                        raise MaterialError('下载素材失败：续传响应范围异常')
+                elif status==200:
+                    offset=0
+                else:
+                    raise MaterialError('下载素材失败：响应状态异常')
+                length=response.headers.get('Content-Length')
+                if length is not None:
+                    try:length=int(length)
+                    except ValueError as exc:raise MaterialError('下载素材失败：素材下载大小异常') from exc
+                    if not 0<=length<=maximum or (expected_size and length!=expected_size-offset):
+                        raise MaterialError('下载素材失败：素材下载大小异常')
+                total=expected_size or (offset+length if length else 0) or total
                 cancelled(cancel)
-                data=response.read(256*1024)
-                if not data:break
-                offset+=len(data)
-                if offset>(total or maximum):raise MaterialError('下载素材失败：素材下载超出上限')
-                with material_phase('写入下载文件'):output.write(data)
-                progress(offset,total,'downloading')
-            with material_phase('写入下载文件'):output.flush()
-        if total and offset!=total:raise MaterialError('下载素材失败：下载未完成，请重新点击下载继续')
+                with material_phase('写入下载文件'):
+                    output=retry_material_io(lambda:open_download_file(archive,'ab' if offset else 'wb'),cancel)
+                with output:
+                    progress(offset,total,'downloading')
+                    while True:
+                        cancelled(cancel)
+                        data=response.read(256*1024)
+                        if not data:break
+                        consecutive_errors=0
+                        offset+=len(data)
+                        if offset>(total or maximum):raise MaterialError('下载素材失败：素材下载超出上限')
+                        with material_phase('写入下载文件'):output.write(data)
+                        progress(offset,total,'downloading')
+                    with material_phase('写入下载文件'):output.flush()
+                if total and offset==total:return
+        except (URLError,HTTPException,OSError,TimeoutError) as exc:
+            consecutive_errors+=1
+            if consecutive_errors>max_retries:raise
+            time.sleep(min(consecutive_errors*2,10))
+            continue
 
 class MaterialStore:
     def __init__(self,app_root,state_dir,catalog_override=None):

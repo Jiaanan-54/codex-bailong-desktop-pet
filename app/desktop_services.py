@@ -17,10 +17,12 @@ def command():
     return '"'+str(Path(sys.executable).with_name('pythonw.exe'))+'" "'+str(Path(__file__).with_name('enhanced.py'))+'"'
 
 def startup_paths():
-    root=Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Startup'
+    if sys.platform!='win32':return Path('/dev/null'),Path('/dev/null')
+    root=Path(os.environ.get('APPDATA',''))/'Microsoft/Windows/Start Menu/Programs/Startup'
     return root/'BailongEnhanced.vbs',root/'白龙桌宠增强版.lnk'
 
 def autostart_enabled():
+    if sys.platform!='win32':return False
     vbs,link=startup_paths()
     from windows_entries import command_parts,command_matches,legacy_command
     expected=command_parts(command())
@@ -29,6 +31,7 @@ def autostart_enabled():
     return old is not None and [os.path.normcase(x) for x in old]==[os.path.normcase(x) for x in expected]
 
 def set_autostart(enabled):
+    if sys.platform!='win32':return
     vbs,link=startup_paths();vbs.parent.mkdir(parents=True,exist_ok=True)
     from windows_entries import startup_entry,command_parts
     startup_entry(link,vbs,command_parts(command()),enabled)

@@ -11,7 +11,7 @@ import stat
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from material_store import (MaterialError, checked, cancelled, discard_archive, hash_file,
                             material_phase, open_download_file, retry_material_io, write_material_entry)
@@ -242,6 +242,16 @@ def extract_missing(url, spec, stage, reused, opener, cancel, progress):
                 end=next(offset for offset in offsets if offset>info.header_offset)
                 cache=checked(stage.parent,f'entry-{info.header_offset}.part')
                 target = checked(stage, info.filename)
-                with remote.entry(info.header_offset,end,cache):
-                    write_material_entry(archive,info,target,cancel)
+                entry_retries = 0
+                while True:
+                    cancelled(cancel)
+                    try:
+                        with remote.entry(info.header_offset,end,cache):
+                            write_material_entry(archive,info,target,cancel)
+                        break
+                    except (URLError, OSError, TimeoutError):
+                        entry_retries += 1
+                        if entry_retries > 3: raise
+                        import time
+                        time.sleep(1)
             progress(remote.received, remote.received, 'downloading')
