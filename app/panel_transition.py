@@ -69,7 +69,10 @@ class NativeLanding(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus);self.hide()
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        from macos_window import configure_macos_window
+        configure_macos_window(self)
+        self.hide()
     def nativeEvent(self,event_type,message):
         from native_window_style import preserve_layered_style
         if preserve_layered_style(self,event_type,message):return True,0

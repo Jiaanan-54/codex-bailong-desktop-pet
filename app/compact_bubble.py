@@ -1408,6 +1408,9 @@ class CompactBubble(Bubble):
         super().hideEvent(event)
     def showEvent(self,event):
         super().showEvent(event)
+        if sys.platform=='darwin':
+            from macos_window import configure_macos_window
+            configure_macos_window(self)
         if not self.size_transition.running and not self.size_transition.preparing:self.content.show()
         if not self.size_transition.running and not self.size_transition.preparing:
             from island_widgets import QuotaSatellite

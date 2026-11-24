@@ -25,6 +25,8 @@ class HintBubble(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        from macos_window import configure_macos_window
+        configure_macos_window(self)
         self.setFont(ui_font(12));self.title='';self.subtitle='';self.level=0.;self.below=False;self.tip_x=20.;self.motion_origin=None;self.motion_side=False
         self.animation=QVariantAnimation(self);self.animation.valueChanged.connect(self._advance)
         self.animation.finished.connect(self._finished);self._closing=False;self._exit_frames=None;self._interrupted=None;self.hide()

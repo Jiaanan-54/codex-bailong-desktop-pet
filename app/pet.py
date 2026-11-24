@@ -39,6 +39,8 @@ class Bubble(QWidget):
         super().__init__(None, FLAGS)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        from macos_window import configure_macos_window
+        configure_macos_window(self)
         self.layout=QVBoxLayout(self); self.layout.setContentsMargins(13,10,13,10);self.layout.setSpacing(5)
         self.setFixedWidth(256)
         set_theme_style(self,'QLabel {'+FONT_CSS+'color:#332644;font-size:12px;} QProgressBar {background:#eee8f5;border:1px solid #c8b5dc;border-radius:7px;height:14px;} QProgressBar::chunk {background:#a47bc9;border-radius:6px;}')
@@ -73,6 +75,8 @@ class Pet(QWidget):
         super().__init__(None,FLAGS)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        from macos_window import configure_macos_window
+        configure_macos_window(self)
         self.setWindowTitle('白龙桌宠');self.setFixedSize(256,256)
         self.manifest=({'idle':{'id':'unavailable','file':'unavailable.webp','durationMs':1000},'variants':[]} if getattr(self,'_materials_missing',False)
             else json.loads((getattr(self,'asset_root',ASSETS)/'素材清单.json').read_text(encoding='utf-8')))
@@ -104,6 +108,11 @@ class Pet(QWidget):
         if progress:progress.close()
         self.transition=None
         self.started=time.monotonic();self.tick.start()
+    def showEvent(self,event):
+        super().showEvent(event)
+        if sys.platform=='darwin':
+            from macos_window import configure_macos_window
+            configure_macos_window(self)
     def constrained_position(self,position,pointer=None):
         screens=QApplication.screens()
         # Allow crossing monitors, but never use their bounding union: it can

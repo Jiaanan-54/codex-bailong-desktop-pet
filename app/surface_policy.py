@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 
 class MacWindowAPI:
-    """macOS foreground process query using native lsappinfo."""
+    """macOS foreground process query using native lsappinfo and Cocoa layering."""
     def foreground(self):
         try:
             front = subprocess.run(['lsappinfo', 'front'], capture_output=True, text=True, timeout=1).stdout.strip()
@@ -22,13 +22,16 @@ class MacWindowAPI:
         return hwnd
 
     def topmost(self, hwnd):
-        return False
+        from macos_window import is_macos_window_topmost
+        return is_macos_window_topmost(hwnd)
 
     def set_layer(self, hwnd, layer, from_bottom=False):
-        return False
+        from macos_window import set_macos_window_layer
+        return set_macos_window_layer(hwnd, layer)
 
     def stack_with(self, top_hwnd, bottom_hwnd):
-        pass
+        from macos_window import order_macos_window
+        order_macos_window(top_hwnd, bottom_hwnd)
 
 
 class SurfacePolicy(QObject):
@@ -40,7 +43,7 @@ class SurfacePolicy(QObject):
             if QApplication.platformName()=='windows':
                 from video_fullscreen import WindowAPI
                 api=WindowAPI()
-            elif sys.platform=='darwin':
+            elif sys.platform=='darwin' and QApplication.platformName()=='cocoa':
                 api=MacWindowAPI()
         self.api=api
         self.timer=QTimer(self);self.timer.setInterval(300);self.timer.timeout.connect(self.poll_focus)
@@ -141,6 +144,9 @@ def update_qt_layer(widget,layer):
     elif layer=='bottom':wanted|=bottom
     if wanted!=flags:
         visible=widget.isVisible();widget.setWindowFlags(wanted)
+        if sys.platform=='darwin':
+            from macos_window import configure_macos_window
+            configure_macos_window(widget)
         if visible:widget.show()
 
 def card_layer(bubble):
