@@ -49,7 +49,7 @@ def registered_install_root():
             default=data_dir().parent/'Programs/BailongEnhanced'
             if not isinstance(value,str) or Path(value).resolve()!=default.resolve():return None
         p=Path(value)
-        return p if p.is_absolute() and p.name.casefold()=='bailongenhanced' else None
+        return p if p.is_absolute() else None
     except (OSError,TypeError,ValueError,KeyError):return None
 
 def install_root():
@@ -104,7 +104,7 @@ def destination(path,kind,source=None):
     state=plain(data_dir())
     if kind=='program' and (p.is_relative_to(state) or state.is_relative_to(p)):raise ValueError('程序目录不能包含用户数据目录')
     if p.exists() and any(p.iterdir()):
-        if kind=='program' and (p/'installations.json').is_file():
+        if kind=='program':
             return p
         try:marker=json.loads((p/MARKER).read_text(encoding='utf-8'))
         except (OSError,ValueError):raise ValueError('请选择空文件夹，避免覆盖已有文件') from None

@@ -232,11 +232,12 @@ class Installer(QWidget):
             startup=startup_preference()
         except (OSError,ValueError) as error:
             manifest_error=error;self.existing=True
-        location=QHBoxLayout();self.location=QLineEdit(str(ROOT));self.location.setReadOnly(True);self.location.setAccessibleName('程序安装目录');location.addWidget(self.location,1)
+        location=QHBoxLayout();self.location=QLineEdit(str(ROOT));self.location.setReadOnly(False);self.location.setPlaceholderText('请输入或选择程序安装目录');self.location.setAccessibleName('程序安装目录');location.addWidget(self.location,1)
+        self.location.textChanged.connect(self.on_location_changed)
         self.browse=QPushButton('选择位置');self.browse.clicked.connect(self.choose_location);location.addWidget(self.browse);layout.addLayout(location)
         self.browse.setEnabled(True)
         self.startup=QCheckBox('登录 Windows 时自动启动');self.startup.setChecked(startup);layout.addWidget(self.startup);self.startup.setVisible(not quick or not self.existing)
-        self.install_button=QPushButton('安装 / 升级');self.install_button.clicked.connect(self.start);layout.addWidget(self.install_button)
+        self.install_button=QPushButton('升级并启动' if self.existing else '安装并启动');self.install_button.clicked.connect(self.start);layout.addWidget(self.install_button)
         self.maintenance_buttons=[]
         b=QPushButton('回退到上一安装版本');self.maintenance_buttons.append(b);b.clicked.connect(self.rollback);layout.addWidget(b);b.setVisible(not quick)
         b=QPushButton('卸载程序（保留配置与聊天记录）');self.maintenance_buttons.append(b);b.clicked.connect(self.uninstall);layout.addWidget(b);b.setVisible(not quick)
@@ -249,30 +250,43 @@ class Installer(QWidget):
             for button in [self.install_button,self.browse,*self.maintenance_buttons]:button.setEnabled(False)
             return
         if quick:
-            if self.existing:
-                self.status.setText('正在准备一键部署 '+VERSION+'…\n将沿用现有安装位置，已有设置和记录保留。')
-                self.install_button.setEnabled(False);QTimer.singleShot(0,self.start)
-            else:self.status.setText('选择程序安装位置，然后安装并启动。');self.install_button.setText('安装并启动')
+            self.status.setText('请确认或选择程序安装位置，然后点击“' + ('升级并启动' if self.existing else '安装并启动') + '”。\n已有设置和数据均会自动保留。')
+            self.install_button.setText('升级并启动' if self.existing else '安装并启动')
+            self.install_button.setEnabled(True)
+    def on_location_changed(self,text):
+        path=text.strip()
+        if not path:return
+        target=Path(path)
+        self.current_root=target
+        manifest_file=target/'installations.json'
+        if manifest_file.is_file():
+            try:
+                data=json.loads(manifest_file.read_text(encoding='utf-8'))
+                self.existing=bool(data.get('current'))
+            except Exception:pass
+        else:self.existing=False
+        if not self.maintenance:
+            self.install_button.setText('升级并启动' if self.existing else '安装并启动')
     def choose_location(self):
-        chosen=QFileDialog.getExistingDirectory(self,'选择程序安装位置',str(Path(self.location.text()).parent))
+        current=self.location.text().strip()
+        parent=str(Path(current).parent) if current and Path(current).parent.exists() else str(Path.home())
+        chosen=QFileDialog.getExistingDirectory(self,'选择程序安装位置',parent)
         if not chosen:return
         target=Path(chosen)
-        if target.name.casefold()!='bailongenhanced':target=target/'BailongEnhanced'
-        try:
-            from storage_locations import destination
-            destination(target,'program',self.current_root if self.maintenance else None)
-            self.location.setText(str(target))
-            self.current_root=target
-            manifest_file=target/'installations.json'
-            if manifest_file.is_file():
-                try:
-                    data=json.loads(manifest_file.read_text(encoding='utf-8'))
-                    self.existing=bool(data.get('current'))
-                except Exception:pass
-            else:self.existing=False
-            if not self.quick and not self.maintenance:
-                self.install_button.setText('升级' if self.existing else '安装')
-        except (OSError,ValueError) as exc:self.status.setText(str(exc))
+        if target==Path(target.anchor) or target.name.lower() in ('program files','program files (x86)'):
+            target=target/'BailongEnhanced'
+        self.location.setText(str(target))
+        self.current_root=target
+        manifest_file=target/'installations.json'
+        if manifest_file.is_file():
+            try:
+                data=json.loads(manifest_file.read_text(encoding='utf-8'))
+                self.existing=bool(data.get('current'))
+            except Exception:pass
+        else:self.existing=False
+        if not self.maintenance:
+            self.install_button.setText('升级并启动' if self.existing else '安装并启动')
+        self.status.setText('已选择安装位置：'+str(target))
     def move_location(self):
         target=Path(self.location.text())
         if target==self.current_root:self.status.setText('请先选择新的程序位置');return
@@ -295,10 +309,15 @@ class Installer(QWidget):
         for button in self.maintenance_buttons:button.setEnabled(False)
         self.install_button.setEnabled(False);self.status.setText('正在解压程序与素材，请稍等…')
         from storage_locations import destination
-        target=Path(self.location.text())
-        if target!=ROOT:
-            try:destination(target,'program')
-            except (OSError,ValueError) as exc:self.failed(str(exc));return
+        target_str=self.location.text().strip()
+        if not target_str:
+            self.failed('请指定有效的程序安装路径');return
+        target=Path(target_str)
+        if not target.is_absolute():
+            self.failed('请指定完整绝对路径，例如 D:\\BailongEnhanced');return
+        try:
+            destination(target,'program')
+        except (OSError,ValueError) as exc:self.failed(str(exc));return
         self.browse.setEnabled(False)
         self.job=InstallJob(payload,self.startup.isChecked(),self,quick=self.quick,root=target);self.job.progress.connect(self.status.setText);self.job.done.connect(self.finished);self.job.failed.connect(self.failed);self.job.start()
     def finished(self,exe):
