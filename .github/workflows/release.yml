@@ -34,9 +34,10 @@ jobs:
           pip install -r requirements-enhanced.txt
           pip install pyinstaller
 
-      - name: Build Windows Portable App
+      - name: Build Windows App & Installer
         shell: pwsh
         run: |
+          # 1. Build main application directory
           pyinstaller --noconfirm --onedir --windowed --name BailongEnhanced --icon app/branding/bailong.ico --add-data "app;app" --paths "app" app/enhanced.py
 
           # Prepare output release package structure
@@ -52,6 +53,11 @@ jobs:
           New-Item -ItemType Directory -Path "$dist/outputs/白龙桌宠素材" -Force
           Copy-Item -Path "outputs/白龙桌宠素材/素材清单.json" -Destination "$dist/outputs/白龙桌宠素材/素材清单.json" -Force
 
+          # 2. Package dist/BailongEnhanced into payload.zip for installer
+          New-Item -ItemType Directory -Path "build" -Force
+          $payloadZip = "build/payload.zip"
+          Compress-Archive -Path "$dist/*" -DestinationPath $payloadZip -Force
+
           $version = "${{ github.ref_name }}"
           if ([string]::IsNullOrWhiteSpace($version) -or -not ($version -like "v*")) {
             $version = "${{ github.event.inputs.tag_name }}"
@@ -59,11 +65,39 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($version)) {
             $version = "v1.10.1"
           }
-          $zipName = "bailong-desktop-pet-$version-windows-x64.zip"
-          Compress-Archive -Path "$dist/*" -DestinationPath $zipName -Force
 
-          $sha = (Get-FileHash -Path $zipName -Algorithm SHA256).Hash
-          "$sha  $zipName" | Out-File -FilePath "$zipName.sha256" -Encoding utf8
+          # 3. Build Windows Installer (.exe) with embedded payload.zip
+          $installerBaseName = "白龙桌宠-$version-一键部署"
+          pyinstaller --noconfirm --windowed --onefile --name $installerBaseName --icon app/branding/bailong.ico --paths "app" --add-data "$payloadZip;." app/installer.py
+
+          $installerExe = "dist/$installerBaseName.exe"
+          Copy-Item -Path $installerExe -Destination "$installerBaseName.exe" -Force
+          Copy-Item -Path $installerExe -Destination "bailong-desktop-pet-$version-setup.exe" -Force
+
+          # 4. Create Windows user distribution zip (containing installer and quick deployment docs)
+          $bundleFolder = "bailong-desktop-pet-$version-windows-x64"
+          New-Item -ItemType Directory -Path $bundleFolder -Force
+          Copy-Item -Path $installerExe -Destination "$bundleFolder/$installerBaseName.exe" -Force
+          if (Test-Path "发布说明/安装管理.cmd") { Copy-Item -Path "发布说明/安装管理.cmd" -Destination "$bundleFolder/安装管理.cmd" -Force }
+          if (Test-Path "发布说明/快速部署说明.txt") { Copy-Item -Path "发布说明/快速部署说明.txt" -Destination "$bundleFolder/快速部署说明.txt" -Force }
+          if (Test-Path "发布说明/新增功能说明.txt") { Copy-Item -Path "发布说明/新增功能说明.txt" -Destination "$bundleFolder/新增功能说明.txt" -Force }
+          if (Test-Path "发布说明/迭代历史.txt") { Copy-Item -Path "发布说明/迭代历史.txt" -Destination "$bundleFolder/迭代历史.txt" -Force }
+          if (Test-Path "docs/releases/$version.md") { Copy-Item -Path "docs/releases/$version.md" -Destination "$bundleFolder/本次更新说明.md" -Force }
+
+          $zipName = "bailong-desktop-pet-$version-windows-x64.zip"
+          Compress-Archive -Path "$bundleFolder/*" -DestinationPath $zipName -Force
+
+          # Also create portable zip
+          $portableZip = "bailong-desktop-pet-$version-windows-portable.zip"
+          Compress-Archive -Path "$dist/*" -DestinationPath $portableZip -Force
+
+          $filesToCheck = @("$installerBaseName.exe", "bailong-desktop-pet-$version-setup.exe", $zipName, $portableZip)
+          foreach ($f in $filesToCheck) {
+            if (Test-Path $f) {
+              $sha = (Get-FileHash -Path $f -Algorithm SHA256).Hash
+              "$sha  $f" | Out-File -FilePath "$f.sha256" -Encoding utf8
+            }
+          }
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -71,6 +105,7 @@ jobs:
           name: release-bundle-windows
           path: |
             *.zip
+            *.exe
             *.sha256
 
   build-macos:
@@ -163,7 +198,7 @@ jobs:
       - name: Generate Global SHA256SUMS
         run: |
           cd all-release-assets
-          sha256sum *.zip > SHA256SUMS.txt || true
+          sha256sum *.zip *.exe > SHA256SUMS.txt 2>/dev/null || sha256sum *.zip > SHA256SUMS.txt || true
           cd ..
 
       - name: Create or Update GitHub Release
@@ -174,6 +209,7 @@ jobs:
           body_path: ${{ steps.get_tag.outputs.BODY_PATH }}
           files: |
             all-release-assets/*.zip
+            all-release-assets/*.exe
             all-release-assets/SHA256SUMS.txt
           draft: false
           prerelease: false
