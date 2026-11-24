@@ -11,6 +11,7 @@ except ImportError:
     psutil = None
 import platform_paths
 import storage_locations
+WATCH_FLAG = '--watch-codex'
 def data_dir():return platform_paths.data_dir()
 def install_root():return storage_locations.install_root()
 def preference_path():return data_dir()/'codex-startup.json'
