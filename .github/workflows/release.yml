@@ -53,6 +53,17 @@ jobs:
           New-Item -ItemType Directory -Path "$dist/outputs/白龙桌宠素材" -Force
           Copy-Item -Path "outputs/白龙桌宠素材/素材清单.json" -Destination "$dist/outputs/白龙桌宠素材/素材清单.json" -Force
 
+          # Copy OpenSSL DLLs to $dist root beside BailongEnhanced.exe (required for Qt & bundled_tls)
+          $pyDllDir = (python -c "import sys, pathlib; print(pathlib.Path(sys.executable).parent / 'DLLs')")
+          foreach ($dll in @("libcrypto-3-x64.dll", "libssl-3-x64.dll")) {
+            $internalDll = "$dist/_internal/$dll"
+            if (Test-Path $internalDll) {
+              Copy-Item -Path $internalDll -Destination "$dist/$dll" -Force
+            } elseif (Test-Path "$pyDllDir\$dll") {
+              Copy-Item -Path "$pyDllDir\$dll" -Destination "$dist/$dll" -Force
+            }
+          }
+
           # 2. Package dist/BailongEnhanced into payload.zip for installer
           New-Item -ItemType Directory -Path "build" -Force
           $payloadZip = "build/payload.zip"
@@ -67,17 +78,19 @@ jobs:
           }
 
           # 3. Build Windows Installer (.exe) with embedded payload.zip
-          $installerBaseName = "白龙桌宠-$version-一键部署"
+          $installerBaseName = "bailong-desktop-pet-$version-setup"
           pyinstaller --noconfirm --windowed --onefile --name $installerBaseName --icon app/branding/bailong.ico --paths "app" --add-data "$payloadZip;." app/installer.py
 
           $installerExe = "dist/$installerBaseName.exe"
-          Copy-Item -Path $installerExe -Destination "$installerBaseName.exe" -Force
           Copy-Item -Path $installerExe -Destination "bailong-desktop-pet-$version-setup.exe" -Force
+          Copy-Item -Path $installerExe -Destination "白龙桌宠-$version-安装程序.exe" -Force
+          Copy-Item -Path $installerExe -Destination "白龙桌宠-$version-一键部署.exe" -Force
 
           # 4. Create Windows user distribution zip (containing installer and quick deployment docs)
           $bundleFolder = "bailong-desktop-pet-$version-windows-x64"
           New-Item -ItemType Directory -Path $bundleFolder -Force
-          Copy-Item -Path $installerExe -Destination "$bundleFolder/$installerBaseName.exe" -Force
+          Copy-Item -Path $installerExe -Destination "$bundleFolder/bailong-desktop-pet-$version-setup.exe" -Force
+          Copy-Item -Path $installerExe -Destination "$bundleFolder/白龙桌宠-$version-安装程序.exe" -Force
           if (Test-Path "发布说明/安装管理.cmd") { Copy-Item -Path "发布说明/安装管理.cmd" -Destination "$bundleFolder/安装管理.cmd" -Force }
           if (Test-Path "发布说明/快速部署说明.txt") { Copy-Item -Path "发布说明/快速部署说明.txt" -Destination "$bundleFolder/快速部署说明.txt" -Force }
           if (Test-Path "发布说明/新增功能说明.txt") { Copy-Item -Path "发布说明/新增功能说明.txt" -Destination "$bundleFolder/新增功能说明.txt" -Force }
@@ -91,7 +104,7 @@ jobs:
           $portableZip = "bailong-desktop-pet-$version-windows-portable.zip"
           Compress-Archive -Path "$dist/*" -DestinationPath $portableZip -Force
 
-          $filesToCheck = @("$installerBaseName.exe", "bailong-desktop-pet-$version-setup.exe", $zipName, $portableZip)
+          $filesToCheck = @("bailong-desktop-pet-$version-setup.exe", "白龙桌宠-$version-安装程序.exe", "白龙桌宠-$version-一键部署.exe", $zipName, $portableZip)
           foreach ($f in $filesToCheck) {
             if (Test-Path $f) {
               $sha = (Get-FileHash -Path $f -Algorithm SHA256).Hash

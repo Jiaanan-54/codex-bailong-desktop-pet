@@ -103,6 +103,8 @@ def destination(path,kind,source=None):
     state=plain(data_dir())
     if kind=='program' and (p.is_relative_to(state) or state.is_relative_to(p)):raise ValueError('程序目录不能包含用户数据目录')
     if p.exists() and any(p.iterdir()):
+        if kind=='program' and (p/'installations.json').is_file():
+            return p
         try:marker=json.loads((p/MARKER).read_text(encoding='utf-8'))
         except (OSError,ValueError):raise ValueError('请选择空文件夹，避免覆盖已有文件') from None
         if marker.get('kind')!=kind or marker.get('source')!=str(Path(source).absolute() if source else ''):

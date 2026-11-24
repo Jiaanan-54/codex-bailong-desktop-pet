@@ -10,7 +10,17 @@ def check_startup():
     if sys.platform != 'win32' or not getattr(sys, 'frozen', False):
         return True
     directory = Path(sys.executable).resolve().parent
-    missing = [name for name in OPENSSL_DLLS if not (directory / name).is_file()]
+    # If OpenSSL DLLs are in _internal, auto-copy them to directory so Qt and check_startup find them
+    for name in OPENSSL_DLLS:
+        target = directory / name
+        internal = directory / '_internal' / name
+        if not target.is_file() and internal.is_file():
+            try:
+                import shutil
+                shutil.copy2(internal, target)
+            except OSError:
+                pass
+    missing = [name for name in OPENSSL_DLLS if not (directory / name).is_file() and not (directory / '_internal' / name).is_file()]
     if not missing:
         return True
     message = (

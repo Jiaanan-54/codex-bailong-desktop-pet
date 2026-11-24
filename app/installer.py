@@ -133,6 +133,15 @@ def stop_existing(root=ROOT):
     for name in manifest.get('versions',[]):
         try:known.add((checked_version(root,name)/'BailongEnhanced.exe').resolve())
         except (OSError,ValueError):continue
+    try:
+        from storage_locations import registered_install_root
+        prev=registered_install_root()
+        if prev and prev.resolve()!=root:
+            prev_m=read_manifest(prev)
+            for name in prev_m.get('versions',[]):
+                try:known.add((checked_version(prev,name)/'BailongEnhanced.exe').resolve())
+                except (OSError,ValueError):continue
+    except Exception:pass
     running=[]
     for process in psutil.process_iter(['exe']):
         try:
@@ -214,7 +223,7 @@ class Installer(QWidget):
             manifest_error=error;self.existing=True
         location=QHBoxLayout();self.location=QLineEdit(str(ROOT));self.location.setReadOnly(True);self.location.setAccessibleName('程序安装目录');location.addWidget(self.location,1)
         self.browse=QPushButton('选择位置');self.browse.clicked.connect(self.choose_location);location.addWidget(self.browse);layout.addLayout(location)
-        self.browse.setEnabled(maintenance or not self.existing)
+        self.browse.setEnabled(True)
         self.startup=QCheckBox('登录 Windows 时自动启动');self.startup.setChecked(startup);layout.addWidget(self.startup);self.startup.setVisible(not quick or not self.existing)
         self.install_button=QPushButton('安装 / 升级');self.install_button.clicked.connect(self.start);layout.addWidget(self.install_button)
         self.maintenance_buttons=[]
@@ -242,6 +251,16 @@ class Installer(QWidget):
             from storage_locations import destination
             destination(target,'program',self.current_root if self.maintenance else None)
             self.location.setText(str(target))
+            self.current_root=target
+            manifest_file=target/'installations.json'
+            if manifest_file.is_file():
+                try:
+                    data=json.loads(manifest_file.read_text(encoding='utf-8'))
+                    self.existing=bool(data.get('current'))
+                except Exception:pass
+            else:self.existing=False
+            if not self.quick and not self.maintenance:
+                self.install_button.setText('升级' if self.existing else '安装')
         except (OSError,ValueError) as exc:self.status.setText(str(exc))
     def move_location(self):
         target=Path(self.location.text())
@@ -282,7 +301,7 @@ class Installer(QWidget):
     def failed(self,message):
         for button in self.maintenance_buttons:button.setEnabled(True)
         self.install_button.setEnabled(True);self.install_button.setText('重试部署' if self.quick else '安装 / 升级');self.status.setText('安装失败：'+message)
-        self.browse.setEnabled(self.maintenance or not self.existing)
+        self.browse.setEnabled(True)
     def maintenance_lock(self,allow_uninstall=False):
         if self.job and self.job.isRunning():raise OSError('安装正在运行，请等待完成')
         if not allow_uninstall and (ROOT/'uninstall-pending.json').exists():raise OSError('卸载尚未结束，请先关闭维护窗口')
