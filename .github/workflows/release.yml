@@ -79,7 +79,7 @@ jobs:
 
           # 3. Build Windows Installer (.exe) with embedded payload.zip
           $installerBaseName = "bailong-desktop-pet-$version-setup"
-          pyinstaller --noconfirm --windowed --onefile --name $installerBaseName --icon app/branding/bailong.ico --paths "app" --add-data "$payloadZip;." app/installer.py
+          pyinstaller --noconfirm --windowed --onefile --name $installerBaseName --icon app/branding/bailong.ico --paths "app" --add-data "app;app" --add-data "$payloadZip;." --collect-all app app/installer.py
 
           $installerExe = "dist/$installerBaseName.exe"
           Copy-Item -Path $installerExe -Destination "bailong-desktop-pet-$version-setup.exe" -Force

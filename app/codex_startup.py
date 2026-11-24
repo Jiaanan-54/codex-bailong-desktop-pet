@@ -9,10 +9,10 @@ try:
     import psutil
 except ImportError:
     psutil = None
-WATCH_FLAG='--watch-codex'
-
-def data_dir():return __import__('platform_paths').data_dir()
-def install_root():return __import__('storage_locations').install_root()
+import platform_paths
+import storage_locations
+def data_dir():return platform_paths.data_dir()
+def install_root():return storage_locations.install_root()
 def preference_path():return data_dir()/'codex-startup.json'
 def startup_path():return Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Startup/BailongCodexSync.lnk'
 def read_json(path):

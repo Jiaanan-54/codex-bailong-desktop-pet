@@ -12,10 +12,21 @@ from pathlib import Path
 from PySide6.QtCore import QThread,Signal,QTimer,QLockFile
 from PySide6.QtWidgets import QApplication,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QCheckBox,QMessageBox,QLineEdit,QFileDialog
 
+import platform_paths
+import storage_locations
 from storage_locations import install_root
+import desktop_core
+from desktop_core import VERSION
+import deployment_state
+import windows_entries
+import codex_startup
+import shared_assets
+import process_launch
+import program_location
+import directory_deploy
+
 ROOT=install_root()
 DATA=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'BailongEnhanced'
-from desktop_core import VERSION
 def read_manifest(root=ROOT):
     try:
         value=json.loads((root/'installations.json').read_text(encoding='utf-8'))
